@@ -35,8 +35,10 @@ Build:
 
 ```bash
 npm install
-npm run build
+npm run compile
 ```
+
+> **Important:** do not add `build`, `prepare`, `prepack`, `install`, `preinstall`, or `postinstall` scripts back to `package.json`. OpenCode's bundled package resolver (bun) runs git-dependency preparation whenever one of those script names exists, and that preparation fails inside OpenCode's runtime — `opencode plugin add` then aborts with "git dep preparation failed". The compiled `dist/` is committed instead; keep it in sync with `npm run compile`.
 
 Then load the built plugin from your OpenCode configuration. Example:
 

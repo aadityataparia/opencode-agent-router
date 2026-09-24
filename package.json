@@ -7,7 +7,7 @@
   "description": "Dynamic model discovery, health probing, classification and per-agent routing for OpenCode + oh-my-opencode.",
   "license": "MIT",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "compile": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
