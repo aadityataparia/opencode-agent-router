@@ -5,9 +5,11 @@ const CHEAP = ["mini", "nano", "flash", "haiku", "small", "lite"];
 function contains(text, patterns) {
     return patterns.some((pattern) => text.includes(pattern));
 }
-function inputSupportsImage(model) {
+function inputSupportsVision(model) {
     const input = model?.capabilities?.input;
-    return Array.isArray(input) && input.includes("image");
+    if (!Array.isArray(input))
+        return false;
+    return ["image", "video", "pdf"].some((kind) => input.includes(kind));
 }
 export function classifyModel(model) {
     const text = [
@@ -17,9 +19,13 @@ export function classifyModel(model) {
         model?.family,
     ].filter(Boolean).join(" ").toLowerCase();
     const categories = new Set();
-    const vision = Boolean(model?.capabilities?.vision) || inputSupportsImage(model) ||
+    const vision = Boolean(model?.capabilities?.vision) || inputSupportsVision(model) ||
         contains(text, ["vision", "vl", "multimodal"]);
-    const reasoning = Boolean(model?.capabilities?.reasoning) || contains(text, REASONING);
+    const reasoning = Boolean(model?.capabilities?.reasoning) ||
+        // `reasoningField` on the catalog entry indicates the model emits
+        // reasoning content, even when `capabilities.reasoning` is absent.
+        Boolean(model?.compatibility?.reasoningField) ||
+        contains(text, REASONING);
     const tools = Boolean(model?.capabilities?.tools);
     if (vision)
         categories.add("vision");
@@ -36,7 +42,8 @@ export function classifyModel(model) {
     categories.add("general");
     return {
         providerID: String(model?.providerID ?? ""),
-        id: String(model?.id ?? ""),
+        id: String(model?.id ?? model?.modelID ?? ""),
+        modelID: model?.modelID ?? model?.id,
         name: model?.name,
         family: model?.family,
         context: Number(model?.limit?.context ?? 0),

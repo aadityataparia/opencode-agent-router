@@ -25,9 +25,21 @@ It intentionally does **not** contain a hard-coded provider/model target list.
 
 ## Important OpenCode integration note
 
-The plugin uses OpenCode's V2 catalog and agent transform APIs. It does not invent a provider SDK for arbitrary providers. Model reachability is primarily represented by catalog presence and optional request probes; actual dispatch remains owned by OpenCode/oh-my-opencode.
+The plugin uses OpenCode's V2 agent transform API and the runtime model
+catalog. Verified against OpenCode `v2.0.16`:
 
-Because OpenCode and oh-my-opencode evolve quickly, pin compatible versions in your own environment and run `npm run check` after upgrades.
+- Models are enumerated via `ctx.model.list()` — the `catalog` domain no
+  longer exists in the v2 plugin context (the published
+  `@opencode-ai/plugin` types may still declare it; trust the runtime).
+- Agents are mutated inside `ctx.agent.transform(...)` via `agents.update(id, …)`
+  and reloaded with `ctx.agent.reload()`.
+- `ctx.options` only contains plugin options; do not assume an `agents` key.
+
+Model reachability is primarily represented by catalog presence and optional
+request probes; actual dispatch remains owned by OpenCode/oh-my-opencode.
+
+Because OpenCode and oh-my-opencode evolve quickly, pin compatible versions in
+your own environment and run `npm run check` after upgrades.
 
 ## Installation
 

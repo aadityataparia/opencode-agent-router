@@ -13,7 +13,9 @@ import { Model } from "@opencode-ai/plugin";
 import { define } from "@opencode-ai/plugin/promise/plugin";
 
 function modelName(model: DiscoveredModel): string {
-  return `${model.providerID}/${model.id}`;
+  // Prefer modelID: for some providers the catalog id differs from the
+  // model id that a Model.Ref must reference.
+  return `${model.providerID}/${model.modelID ?? model.id}`;
 }
 
 function log(enabled: boolean, ...args: unknown[]): void {
@@ -31,7 +33,14 @@ export const OpenCodeAgentRouter = define({
     let refreshing = false;
 
     async function discover(): Promise<DiscoveredModel[]> {
-      const catalog = await ctx.catalog.model.list();
+      // The published @opencode-ai/plugin types still declare a `catalog`
+      // domain, but the OpenCode v2 runtime exposes models via `ctx.model`
+      // and providers via `ctx.provider` (verified against v2.0.16).
+      // `ctx.model.list()` resolves to the same { location, data } shape.
+      type RuntimeCtx = typeof ctx & {
+        model: { list(): Promise<{ data: Array<Record<string, unknown>> }> };
+      };
+      const catalog = await (ctx as RuntimeCtx).model.list();
       const models = catalog.data.map(classifyModel);
       return health.merge(models);
     }
@@ -45,10 +54,10 @@ export const OpenCodeAgentRouter = define({
         log(config.log, `discovered ${models.length} models (${reason})`);
 
         const assignments = new Map<AgentName, Model.Ref>();
-        const userDefinedAgents = ctx.options["agents"] as Record<
-          string,
-          AgentRequirements
-        >;
+        // `ctx.options` carries plugin options only; there is no guaranteed
+        // `agents` key, so guard against undefined before Object.keys.
+        const userDefinedAgents = (ctx.options?.["agents"] ??
+          {}) as Record<string, AgentRequirements>;
 
         for (const agentName of [
           ...AGENT_NAMES,

@@ -7,7 +7,9 @@ import { AGENT_NAMES, } from "./types.js";
 import { Model } from "@opencode-ai/plugin";
 import { define } from "@opencode-ai/plugin/promise/plugin";
 function modelName(model) {
-    return `${model.providerID}/${model.id}`;
+    // Prefer modelID: for some providers the catalog id differs from the
+    // model id that a Model.Ref must reference.
+    return `${model.providerID}/${model.modelID ?? model.id}`;
 }
 function log(enabled, ...args) {
     if (enabled)
@@ -22,7 +24,7 @@ export const OpenCodeAgentRouter = define({
         let timer;
         let refreshing = false;
         async function discover() {
-            const catalog = await ctx.catalog.model.list();
+            const catalog = await ctx.model.list();
             const models = catalog.data.map(classifyModel);
             return health.merge(models);
         }
@@ -34,7 +36,10 @@ export const OpenCodeAgentRouter = define({
                 const models = await discover();
                 log(config.log, `discovered ${models.length} models (${reason})`);
                 const assignments = new Map();
-                const userDefinedAgents = ctx.options["agents"];
+                // `ctx.options` carries plugin options only; there is no guaranteed
+                // `agents` key, so guard against undefined before Object.keys.
+                const userDefinedAgents = (ctx.options?.["agents"] ??
+                    {});
                 for (const agentName of [
                     ...AGENT_NAMES,
                     ...Object.keys(userDefinedAgents),

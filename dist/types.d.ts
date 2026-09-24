@@ -20,6 +20,8 @@ export interface ModelCost {
 export interface DiscoveredModel {
     providerID: string;
     id: string;
+    /** Catalog modelID; may differ from `id` for some providers. */
+    modelID?: string;
     name?: string;
     family?: string;
     context: number;
