@@ -2,13 +2,11 @@
 
 A dynamic OpenCode plugin that discovers models from the OpenCode runtime,
 probes them, classifies them by capability, scores them per agent, and exposes
-the result as a virtual **`model-router` provider**: one model per managed
-agent (`model-router/<agent>`), each routing to the best real model.
+the result as **one alias model per managed agent** — `opencode/<agent>` —
+each routing to the best real model via a request-body override. Point any
+agent at `opencode/<agent>` and it gets automatic, health-aware re-routing.
 
-Agents are never modified by this plugin. Point any agent at
-`model-router/<agent>` (for example in a preset: `"model":
-"model-router/orchestrator"`) and it gets automatic, health-aware re-routing
-without the agent definition changing — this keeps agents owned by other
+Agents are never modified by this plugin, keeping agents owned by other
 plugins and presets untouched.
 
 ## How it works
@@ -20,14 +18,25 @@ plugins and presets untouched.
    latency, success/failure and cooldown state.
 4. Builds a candidate pool independently for each managed agent and picks the
    highest-scoring reachable model per routing strategy.
-5. Registers a `model-router` provider (mirroring OpenCode's own provider:
-   `@opencode/ai/providers/openai-compatible` against
-   `https://opencode.ai/zen/v1`) with one model per assigned agent. Each alias
-   model carries a request-body override (`body.model`) pointing at the routed
-   real model, so `model-router/<agent>` transparently forwards to it.
+5. Attaches alias models to the native `opencode` provider via
+   `ctx.provider.transform` + `ctx.provider.reload()`. Each alias
+   (`opencode/sisyphus`, `opencode/orchestrator`, `opencode/designer`, …)
+   carries a request-body override (`body.model` → routed real model), so it
+   transparently forwards to the best model through OpenCode's zen endpoint.
 6. Refreshes periodically — when health or availability changes, only the
-   alias targets are re-pointed; agents keep their `model-router/<agent>`
+   alias targets are re-pointed; agents keep their `opencode/<agent>`
    reference unchanged.
+
+## Why models live on the `opencode` provider
+
+The model list is gated on **availability**: the runtime (v2.0.16) only
+surfaces models from native providers or providers with a resolvable
+credential/connection. A config `provider` stub or a plugin-registered
+provider is stored in the registry but never listed — a plugin cannot create
+a connection (`ctx.provider` only exposes `list`/`get`/`transform`). The
+`opencode` provider is the listed provider that proxies to the correct
+endpoint (`https://opencode.ai/zen/v1`, `apiKey: "public"`), so alias models
+attach there while keeping the requested model ids (`opencode/<agent>`).
 
 ## Configuration
 
@@ -45,25 +54,25 @@ plugins and presets untouched.
 ## Usage
 
 With the plugin installed, routed models appear in the model list under the
-**`Model Router`** provider, e.g. `model-router/orchestrator`,
-`model-router/explorer`, `model-router/designer`, `model-router/sisyphus`, …
+**`opencode`** provider, named `orchestrator (routed)`, `explorer (routed)`,
+`designer (routed)`, `sisyphus (routed)`, … — model ref `opencode/<agent>`.
 
-Set an agent's model to `model-router/<agent>`:
+Set an agent's model to `opencode/<agent>`:
 
 ```jsonc
 {
   "agent": {
-    "orchestrator": { "model": "model-router/orchestrator" }
+    "orchestrator": { "model": "opencode/orchestrator" }
   }
 }
 ```
 
 The plugin handles choosing the real model and re-routing it as health,
-latency and availability change.
+latency and availability change — the agent definition never changes.
 
 ## Compatibility
 
 Verified against OpenCode `v2.0.16` using the `@opencode/plugin` SDK
 (`Plugin.define`, `ctx.model.list()`, `ctx.provider.transform()` /
-`ctx.provider.reload()`). The router provider forwards to OpenCode's zen
+`ctx.provider.reload()`). Alias forwarding works through OpenCode's zen
 endpoint, so aliases cover targets on the `opencode` provider.
