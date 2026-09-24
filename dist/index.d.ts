@@ -1,2 +1,3 @@
-export declare const OpenCodeAgentRouter: import("@opencode-ai/plugin/promise/plugin").Plugin;
+import { Plugin } from "@opencode/plugin";
+export declare const OpenCodeAgentRouter: Plugin.Plugin;
 export default OpenCodeAgentRouter;

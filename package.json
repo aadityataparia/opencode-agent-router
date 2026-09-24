@@ -11,7 +11,7 @@
     "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "next"
+    "@opencode/plugin": "2.0.14"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",

@@ -1,151 +1,69 @@
 # OpenCode Agent Router
 
-A dynamic OpenCode plugin that discovers models from the OpenCode catalog, probes them, classifies them by capability, scores them for each oh-my-opencode agent, and continuously refreshes the agent model/fallback chains.
+A dynamic OpenCode plugin that discovers models from the OpenCode runtime,
+probes them, classifies them by capability, scores them per agent, and exposes
+the result as a virtual **`model-router` provider**: one model per managed
+agent (`model-router/<agent>`), each routing to the best real model.
 
-It intentionally does **not** contain a hard-coded provider/model target list.
+Agents are never modified by this plugin. Point any agent at
+`model-router/<agent>` (for example in a preset: `"model":
+"model-router/orchestrator"`) and it gets automatic, health-aware re-routing
+without the agent definition changing — this keeps agents owned by other
+plugins and presets untouched.
 
-## What it does
+## How it works
 
-1. Reads every model exposed by `ctx.catalog.model.list()`.
-2. Uses catalog metadata to infer context, tools, vision, reasoning and cost.
-3. Optionally performs lightweight reachability probes through the OpenCode session API.
-4. Maintains health, latency, success/failure and cooldown state.
-5. Classifies models into:
-   - reasoning
-   - coding
-   - fast
-   - vision
-   - long-context
-   - cheap
-   - general
-6. Builds a candidate pool independently for each oh-my-opencode agent.
-7. Assigns the highest-scoring reachable model as the agent's primary model.
-8. Writes additional candidates into `fallback_models`.
-9. Refreshes periodically so newly connected providers/models become eligible automatically.
+1. Reads every model exposed by `ctx.model.list()`.
+2. Classifies models into: `reasoning`, `coding`, `fast`, `vision`,
+   `long-context`, `cheap`, `general`.
+3. Optionally performs lightweight reachability probes and maintains health,
+   latency, success/failure and cooldown state.
+4. Builds a candidate pool independently for each managed agent and picks the
+   highest-scoring reachable model per routing strategy.
+5. Registers a `model-router` provider (mirroring OpenCode's own provider:
+   `@opencode/ai/providers/openai-compatible` against
+   `https://opencode.ai/zen/v1`) with one model per assigned agent. Each alias
+   model carries a request-body override (`body.model`) pointing at the routed
+   real model, so `model-router/<agent>` transparently forwards to it.
+6. Refreshes periodically — when health or availability changes, only the
+   alias targets are re-pointed; agents keep their `model-router/<agent>`
+   reference unchanged.
 
-## Important OpenCode integration note
+## Configuration
 
-The plugin uses OpenCode's V2 agent transform API and the runtime model
-catalog. Verified against OpenCode `v2.0.16`:
+| Option | Meaning |
+| --- | --- |
+| `refreshMs` | Interval between refresh passes (default `60_000`). |
+| `strategy` | Routing strategy: `priority`, `round-robin`, `weighted`, `latency`, `rate`, `adaptive`. |
+| `minHealth` | Minimum health score for a model to be routable (default `0.5`). |
+| `probe` | Enable reachability probes (default `true`). |
+| `probeTimeoutMs` | Probe timeout per model (default `8_000`). |
+| `maxFallbacks` | Candidate fallbacks considered per agent (default `3`). |
+| `log` | Verbose logging (env `OCO_ROUTER_LOG=true` also enables it). |
+| `agents` | Extra agent definitions (requirement categories/weights). |
 
-- Models are enumerated via `ctx.model.list()` — the `catalog` domain no
-  longer exists in the v2 plugin context (the published
-  `@opencode-ai/plugin` types may still declare it; trust the runtime).
-- Agents are mutated inside `ctx.agent.transform(...)` via `agents.update(id, …)`
-  and reloaded with `ctx.agent.reload()`.
-- `ctx.options` only contains plugin options; do not assume an `agents` key.
+## Usage
 
-Model reachability is primarily represented by catalog presence and optional
-request probes; actual dispatch remains owned by OpenCode/oh-my-opencode.
+With the plugin installed, routed models appear in the model list under the
+**`Model Router`** provider, e.g. `model-router/orchestrator`,
+`model-router/explorer`, `model-router/designer`, `model-router/sisyphus`, …
 
-Because OpenCode and oh-my-opencode evolve quickly, pin compatible versions in
-your own environment and run `npm run check` after upgrades.
+Set an agent's model to `model-router/<agent>`:
 
-## Installation
-
-Build:
-
-```bash
-npm install
-npm run compile
-```
-
-> **Important:** do not add `build`, `prepare`, `prepack`, `install`, `preinstall`, or `postinstall` scripts back to `package.json`. OpenCode's bundled package resolver (bun) runs git-dependency preparation whenever one of those script names exists, and that preparation fails inside OpenCode's runtime — `opencode plugin add` then aborts with "git dep preparation failed". The compiled `dist/` is committed instead; keep it in sync with `npm run compile`.
-
-Then load the built plugin from your OpenCode configuration. Example:
-
-```json
+```jsonc
 {
-  "plugin": [
-    "/absolute/path/to/opencode-agent-router/dist/index.js"
-  ]
+  "agent": {
+    "orchestrator": { "model": "model-router/orchestrator" }
+  }
 }
 ```
 
-If your OpenCode version expects a package/plugin identifier instead of a filesystem path, publish/install the package and use that identifier.
+The plugin handles choosing the real model and re-routing it as health,
+latency and availability change.
 
-## Environment variables
+## Compatibility
 
-- `OCO_ROUTER_REFRESH_MS` default `60000`
-- `OCO_ROUTER_MAX_FALLBACKS` default `5`
-- `OCO_ROUTER_PROBE` default `false`
-- `OCO_ROUTER_PROBE_TIMEOUT_MS` default `8000`
-- `OCO_ROUTER_STRATEGY` default `adaptive`
-- `OCO_ROUTER_MIN_HEALTH` default `0.20`
-- `OCO_ROUTER_LOG` default `false`
-
-## Strategies
-
-- `priority`: highest score first
-- `round-robin`: rotate through eligible candidates
-- `weighted`: weighted random based on score
-- `latency`: lowest observed latency
-- `rate`: highest recent success rate
-- `adaptive`: combines suitability, health, latency, cost and context
-
-Set:
-
-```bash
-export OCO_ROUTER_STRATEGY=adaptive
-```
-
-## Agent model requirements
-
-The plugin models the current oh-my-opencode roster:
-
-- sisyphus
-- hephaestus
-- prometheus
-- atlas
-- oracle
-- librarian
-- explore
-- multimodal-looker
-- metis
-- momus
-- sisyphus-junior
-
-If an installation changes its agent roster, the plugin safely skips missing agents.
-
-## Design
-
-```text
-OpenCode model catalog
-        |
-        v
-  model scanner
-        |
-        v
- metadata classifier -----> capability categories
-        |
-        +----> health / latency state
-        |
-        v
- per-agent requirements
-        |
-        v
- candidate scoring
-        |
-        v
- routing strategy
-        |
-        +--> primary model
-        +--> fallback_models
-        |
-        v
-oh-my-opencode agent
-```
-
-## Safety behavior
-
-- Models below the configured health threshold are excluded.
-- Failed probes temporarily cool down a model.
-- A model with insufficient context/tools/vision/reasoning is excluded when those are hard requirements.
-- If no candidate satisfies an agent's hard requirements, the agent is left unchanged rather than assigned an unsuitable model.
-- The plugin never embeds API keys or provider credentials.
-
-## Limitations
-
-A catalog entry is not identical to a successful inference request. Some providers expose models that can fail later because of quota, account permissions, region restrictions, transient outages or provider-specific constraints. The health tracker therefore improves decisions over time but cannot guarantee availability.
-
-For production use, run with `OCO_ROUTER_PROBE=true` only after verifying that your OpenCode build permits the chosen probe mechanism and that probe traffic is acceptable for your provider accounts.
+Verified against OpenCode `v2.0.16` using the `@opencode/plugin` SDK
+(`Plugin.define`, `ctx.model.list()`, `ctx.provider.transform()` /
+`ctx.provider.reload()`). The router provider forwards to OpenCode's zen
+endpoint, so aliases cover targets on the `opencode` provider.

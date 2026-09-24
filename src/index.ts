@@ -9,20 +9,34 @@ import {
   type AgentName,
   type DiscoveredModel,
 } from "./types.js";
-import { Model } from "@opencode-ai/plugin";
-import { define } from "@opencode-ai/plugin/promise/plugin";
+import { Model, Plugin, Provider } from "@opencode/plugin";
 
-function modelName(model: DiscoveredModel): string {
-  // Prefer modelID: for some providers the catalog id differs from the
-  // model id that a Model.Ref must reference.
-  return `${model.providerID}/${model.modelID ?? model.id}`;
-}
+/**
+ * The router registers a virtual provider ("model-router") that exposes one
+ * model per managed agent. Each model aliases to the best real model via a
+ * request-body override (`body.model`), so traffic to `model-router/<agent>`
+ * is forwarded to OpenCode's zen endpoint with the routed model id.
+ *
+ * Agents are never modified: whoever owns an agent (another plugin, the user,
+ * a preset) can point it at `model-router/<agent>` and get automatic,
+ * health-aware re-routing without the agent definition changing.
+ */
+const ROUTER_PROVIDER = "model-router";
+const ROUTER_PACKAGE = "@opencode/ai/providers/openai-compatible";
+// Mirrors the runtime "opencode" provider (verified against v2.0.16):
+// activation "enabled", apiKey "public", baseURL https://opencode.ai/zen/v1.
+const ROUTER_SETTINGS = {
+  baseURL: "https://opencode.ai/zen/v1",
+  apiKey: "public",
+} as const;
+const OPENCODE_PROVIDER = "opencode";
 
 function log(enabled: boolean, ...args: unknown[]): void {
-  if (enabled) console.log("[opencode-agent-router]", ...args);
+  // console.error so diagnostics surface in `--print-logs` output.
+  if (enabled) console.error("[opencode-agent-router]", ...args);
 }
 
-export const OpenCodeAgentRouter = define({
+export const OpenCodeAgentRouter = Plugin.define({
   id: "opencode-agent-router",
   setup: async (ctx) => {
     const config = loadConfig();
@@ -33,17 +47,88 @@ export const OpenCodeAgentRouter = define({
     let refreshing = false;
 
     async function discover(): Promise<DiscoveredModel[]> {
-      // The published @opencode-ai/plugin types still declare a `catalog`
-      // domain, but the OpenCode v2 runtime exposes models via `ctx.model`
-      // and providers via `ctx.provider` (verified against v2.0.16).
-      // `ctx.model.list()` resolves to the same { location, data } shape.
-      type RuntimeCtx = typeof ctx & {
-        model: { list(): Promise<{ data: Array<Record<string, unknown>> }> };
-      };
-      const catalog = await (ctx as RuntimeCtx).model.list();
+      const catalog = await ctx.model.list();
       const models = catalog.data.map(classifyModel);
       return health.merge(models);
     }
+
+    async function computeAssignments(
+      models: DiscoveredModel[],
+    ): Promise<Map<AgentName, DiscoveredModel>> {
+      const assignments = new Map<AgentName, DiscoveredModel>();
+      const userDefinedAgents = (ctx.options?.["agents"] ??
+        {}) as Record<string, AgentRequirements>;
+
+      for (const agentName of [
+        ...AGENT_NAMES,
+        ...(Object.keys(userDefinedAgents) as AgentName[]),
+      ]) {
+        const candidates = findCandidates(
+          agentName,
+          models,
+          userDefinedAgents,
+        ).filter(({ model }) => model.health >= config.minHealth);
+
+        if (candidates.length === 0) {
+          log(config.log, `no suitable model for ${agentName}; skipping`);
+          continue;
+        }
+
+        const chosen = router.choose(agentName, candidates, config.strategy);
+        if (chosen) assignments.set(agentName, chosen.model);
+      }
+
+      return assignments;
+    }
+
+    /**
+     * Register (or refresh) the model-router provider: one alias model per
+     * assigned agent. Aliases only cover targets on the opencode provider,
+     * because the router provider forwards through opencode's zen endpoint.
+     */
+    async function syncRouterProvider(
+      assignments: Map<AgentName, DiscoveredModel>,
+    ): Promise<void> {
+      const providerID = Provider.ID.make(ROUTER_PROVIDER);
+      const models: Model.Info[] = [];
+
+      for (const [agentName, target] of assignments) {
+        if (target.providerID !== OPENCODE_PROVIDER) {
+          log(
+            config.log,
+            `${agentName}: target ${target.providerID}/${target.modelID ?? target.id} is not on the opencode provider; no alias created`,
+          );
+          continue;
+        }
+        const targetID = target.modelID ?? target.id;
+        models.push({
+          ...Model.Info.default(providerID, Model.ID.make(agentName)),
+          name: `${agentName} (routed)`,
+          body: { model: targetID },
+        });
+      }
+
+      await ctx.provider.transform((editor) => {
+        if (editor.get(ROUTER_PROVIDER)) {
+          editor.models.set(ROUTER_PROVIDER, models);
+        } else {
+          editor.add({
+            info: {
+              ...Provider.Info.empty(providerID),
+              name: "Model Router",
+              package: ROUTER_PACKAGE,
+              activation: "enabled",
+              settings: { ...ROUTER_SETTINGS },
+            },
+            models,
+          });
+        }
+      });
+
+      await ctx.provider.reload();
+    }
+
+    let lastAssignments = "";
 
     async function applyRouting(reason: string): Promise<void> {
       if (refreshing) return;
@@ -53,48 +138,24 @@ export const OpenCodeAgentRouter = define({
         const models = await discover();
         log(config.log, `discovered ${models.length} models (${reason})`);
 
-        const assignments = new Map<AgentName, Model.Ref>();
-        // `ctx.options` carries plugin options only; there is no guaranteed
-        // `agents` key, so guard against undefined before Object.keys.
-        const userDefinedAgents = (ctx.options?.["agents"] ??
-          {}) as Record<string, AgentRequirements>;
+        const assignments = await computeAssignments(models);
+        const signature = [...assignments.entries()]
+          .map(([agent, model]) => `${agent}=${model.providerID}/${model.modelID ?? model.id}`)
+          .join(",");
 
-        for (const agentName of [
-          ...AGENT_NAMES,
-          ...(Object.keys(userDefinedAgents) as AgentName[]),
-        ]) {
-          const candidates = findCandidates(
-            agentName,
-            models,
-            userDefinedAgents,
-          ).filter(({ model }) => model.health >= config.minHealth);
-
-          if (candidates.length === 0) {
-            log(
-              config.log,
-              `no suitable model for ${agentName}; leaving unchanged`,
-            );
-            continue;
-          }
-
-          const chosen = router.choose(agentName, candidates, config.strategy);
-          if (!chosen) continue;
-
-          assignments.set(agentName, Model.Ref.parse(modelName(chosen.model)));
+        if (signature === lastAssignments) {
+          log(config.log, "no routing changes; skipping provider refresh");
+          return;
         }
+        lastAssignments = signature;
 
-        await ctx.agent.transform((agents) => {
-          for (const [agentName, ref] of assignments) {
-            agents.update(agentName, (agent) => {
-              agent.model = ref;
-            });
-          }
-        });
+        await syncRouterProvider(assignments);
 
-        await ctx.agent.reload();
-
-        for (const [agent, ref] of assignments) {
-          log(config.log, agent, "=>", `${ref.providerID}/${ref.id}`);
+        for (const [agent, model] of assignments) {
+          log(
+            config.log,
+            `${agent} => model-router/${agent} -> ${model.providerID}/${model.modelID ?? model.id}`,
+          );
         }
       } catch (error) {
         console.error("[opencode-agent-router] refresh failed", error);

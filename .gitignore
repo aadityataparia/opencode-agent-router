@@ -141,3 +141,6 @@ out
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local plugin probes
+.opencode/
