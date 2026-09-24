@@ -1,0 +1,25 @@
+{
+  "name": "opencode-agent-router",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "module": "./dist/index.js",
+  "description": "Dynamic model discovery, health probing, classification and per-agent routing for OpenCode + oh-my-opencode.",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@opencode-ai/plugin": "next"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^5.8.0"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  }
+}

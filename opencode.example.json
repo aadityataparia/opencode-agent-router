@@ -1,0 +1,5 @@
+{
+  "plugin": [
+    "/absolute/path/to/opencode-agent-router/dist/index.js"
+  ]
+}
