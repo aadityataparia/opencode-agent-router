@@ -32,6 +32,9 @@ function describe(error) {
  * matched textually; the status code is preferred where one is present.
  */
 function classify(status, detail) {
+    if (/insufficient|credits/i.test(detail)) {
+        return "unusable";
+    }
     if (status === 429 ||
         /\b(429)\b/.test(detail) ||
         /rate.?limit|too many requests/i.test(detail)) {

@@ -71,6 +71,10 @@ function describe(error: unknown): string {
  * matched textually; the status code is preferred where one is present.
  */
 function classify(status: number | undefined, detail: string): ProbeVerdict {
+  if (/insufficient|credits/i.test(detail)) {
+    return "unusable";
+  }
+
   if (
     status === 429 ||
     /\b(429)\b/.test(detail) ||
