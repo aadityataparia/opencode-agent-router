@@ -121,7 +121,9 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     // `readSelection`, which resolves off-session the same way the poll does.
     let signature = "";
     const unsubscribe = ctx.data.on("session.model.selected", (event) => {
-      trace(`model.selected ${event.data.model.providerID}/${event.data.model.id}`);
+      trace(
+        `model.selected ${event.data.model.providerID}/${event.data.model.id}`,
+      );
       rebuild();
       // Re-seed the signature so the poll does not rebuild the same tree again.
       // If the event outran the data it announces, the value written here is
@@ -235,7 +237,7 @@ function routeRow(
           textAlign: "right",
         },
         [
-          "↳" +
+          "↳ " +
             (options.variant
               ? `${route.target} (${options.variant})`
               : route.target),

@@ -19,6 +19,7 @@ import { Model, Plugin, Provider } from "@opencode/plugin";
  */
 const ROUTER_PROVIDER = "model-router";
 const ROUTER_PROVIDER_NAME = "Model Router";
+const ALIAS_VARIANTS = ["low", "medium", "high", "xhigh"];
 /** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
 const PROBE_CONCURRENCY = 6;
 /** Re-probe a model only after this many multiples of the refresh interval. */
@@ -352,6 +353,9 @@ export const OpenCodeAgentRouter = Plugin.define({
                     package: transport.package,
                     settings: { ...transport.settings },
                     body: { model: targetID },
+                    variants: ALIAS_VARIANTS.map((id) => ({
+                        id: Model.VariantID.make(id),
+                    })),
                 });
             }
             return aliases;
