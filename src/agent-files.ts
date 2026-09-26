@@ -11,21 +11,12 @@ import { join } from "node:path";
 import { ROUTER_AGENT_PREFIX } from "./types";
 
 /**
- * Materialises `model-router/<agent>` as Markdown agent files under
- * `~/.config/opencode/agents/`, because `AgentEditor` has no `add` and the
- * transform can only update an agent that already exists. A nested path becomes
- * the agent id.
- *
- * Never overwrites, and prunes only files still byte-for-byte what this module
- * would write: a `model` in the frontmatter would beat the transform, and a
- * hand-edited file is the user's, not ours to delete.
+ * Writes `model-router/<agent>` Markdown files under `~/.config/opencode/agents/`,
+ * since `AgentEditor` has no `add`. Never overwrites, and prunes only files still
+ * byte-for-byte what this module would write.
  */
 
-/**
- * Roles that should also be selectable as a session's primary agent. Everything
- * else is a `subagent`: with nine routed roles, letting all of them be picked as
- * the main agent turns the agent picker into noise.
- */
+/** Roles that may also run as a session's primary agent; the rest are subagents. */
 const PRIMARY_ROLES = new Set(["orchestrator"]);
 
 /** Agent ids become file names; anything outside this set is not written. */
@@ -73,11 +64,8 @@ export interface AgentSync {
 }
 
 /**
- * Reconcile the routed agent files with the roles the router actually routes.
- *
- * Creates what is missing, removes what is provably ours and no longer wanted.
- * Best-effort throughout: a read-only or missing config directory must not stop
- * the router, it just means the transform has nothing to update and says so.
+ * Creates missing agent files and prunes ones for roles no longer routed.
+ * Best-effort: an unwritable config directory is reported, not thrown.
  */
 export function syncRoutedAgents(
   names: readonly string[],
@@ -126,9 +114,7 @@ export function syncRoutedAgents(
       continue;
     }
 
-    // Delete only what is still exactly what we would have written. A file the
-    // user edited, or wrote themselves, is reported and left alone: a leftover
-    // agent is cosmetic, a deleted hand-written prompt is lost work.
+    // Only ever delete a file still byte-for-byte what we would have written.
     if (current !== document(name)) {
       kept.push(`${ROUTER_AGENT_PREFIX}${name}`);
       onWarn(

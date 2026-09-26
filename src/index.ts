@@ -24,9 +24,8 @@ import {
 import { Model, Plugin, Provider } from "@opencode/plugin";
 
 /**
- * One agent per managed role, `model-router/<agent>`, kept pointed at whichever
- * real model wins routing. `AgentEditor` has no `add`, so the ids must already
- * exist; a model configured on the agent would win over this transform.
+ * One agent per role, `model-router/<agent>`, kept pointed at the winning model.
+ * `AgentEditor` has no `add`, and a model on the agent would beat the transform.
  */
 
 /** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
@@ -90,6 +89,10 @@ export const OpenCodeAgentRouter = Plugin.define({
           config.log,
           `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`,
         );
+        log(
+          config.log,
+          "restart OpenCode to discover the new agent files",
+        );
       }
       if (agentSync.removed.length > 0) {
         log(
@@ -108,19 +111,11 @@ export const OpenCodeAgentRouter = Plugin.define({
       return health.merge(catalog.data.map(classifyModel));
     }
 
-    /**
-     * Sticky across passes: a failed model is in cooldown, so rebuilding this
-     * each pass would empty it and repeat the notice every cooldown.
-     */
+    /** Sticky across passes: a failed model is in cooldown, so a per-pass rebuild would empty it. */
     const authBlocked = new Map<string, number>();
     let lastAuthNotice = "";
 
-    /**
-     * Probe every routable model and keep the ones that answer, so the pool only
-     * holds models known to work. `force` (a `/router refresh`) skips the probe
-     * cache and cooldown, which is when a reconnected credential would
-     * otherwise stay unretested.
-     */
+    /** Keep only models that answer. `force` skips the probe cache and cooldown, for when a credential was just reconnected. */
     async function probeCandidates(
       models: DiscoveredModel[],
       force = false,
@@ -554,10 +549,7 @@ ${text}
       }
     };
 
-    /**
-     * Replies go out as synthetic session messages, so a command costs no model
-     * call and shows the router's own output.
-     */
+    /** Replies go out as synthetic session messages, so a command costs no model call. */
     const commandRegistration = await ctx.command.transform((editor) => {
       editor.add({
         name: ROUTER_COMMAND,

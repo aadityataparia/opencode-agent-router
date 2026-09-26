@@ -2,11 +2,7 @@ import { appendFileSync, readFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
 
-/**
- * Renders the routed agents in the OpenCode sidebar. A sidebar rather than a
- * command: the route list is reference information, and a command would cost a
- * model turn every time it was run.
- */
+/** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
 const LABEL_WIDTH = 14;
 const REFRESH_MS = 1_000;
@@ -49,6 +45,21 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     let expanded = false;
     let disposed = false;
     let disposeSlot: (() => void) | undefined;
+
+    // The agent list is cached, and the routed agents may not exist yet.
+    const AGENT_RESYNC_MS = 5_000;
+    let lastResync = 0;
+    const resyncAgents = (force = false): void => {
+      const now = Date.now();
+      if (!force && now - lastResync < AGENT_RESYNC_MS) return;
+      lastResync = now;
+      try {
+        ctx.data.location.agent.invalidate();
+        void ctx.data.location.agent.sync();
+      } catch (error) {
+        trace(`agent resync failed ${String(error)}`);
+      }
+    };
 
     const build = (): Element => {
       const location = ctx.location ?? ctx.data.location.default();
@@ -127,6 +138,9 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     });
 
     const timer = setInterval(() => {
+      if (readRoutes(ctx, ctx.location ?? ctx.data.location.default()).length === 0) {
+        resyncAgents();
+      }
       const next = stateSignature(ctx);
       if (next === signature) return;
       signature = next;
@@ -135,6 +149,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     }, REFRESH_MS);
 
     claim();
+    resyncAgents(true);
     signature = stateSignature(ctx);
 
     return () => {
@@ -267,10 +282,7 @@ function emptyState(
   ];
 }
 
-/**
- * Click to activate, like the host's own sidebar rows. No hover fill: clearing it
- * means setting a prop to `undefined`.
- */
+/** Click to activate, like the host's sidebar rows. No hover fill: clearing it means setting a prop to `undefined`. */
 function interactive(node: Element, onActivate: () => void): Element {
   setProp(node, "onMouseUp", () => onActivate());
   return node;
@@ -278,10 +290,7 @@ function interactive(node: Element, onActivate: () => void): Element {
 
 /* -------------------------------------------------------------------- state */
 
-/**
- * Live routes, read from the agents the server maintains. An agent with no model
- * is not a route yet, and listing it with an empty target would read as broken.
- */
+/** Live routes, read from the agents the server maintains. An agent with no model is not a route yet. */
 function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
   const agents = ctx.data.location.agent.list(location) ?? [];
   const routes: Route[] = [];
@@ -299,11 +308,7 @@ function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
   return routes.sort((a, b) => a.agent.localeCompare(b.agent));
 }
 
-/**
- * The model in use now. The prompt's own selection is not exposed to TUI
- * plugins, so a session is read from its record; off a session, the primary
- * agent's configured model stands in.
- */
+/** The model in use now: from the session record, or the primary agent's model off a session. */
 function readSelection(
   ctx: TuiContext,
   location: TuiLocation,
@@ -322,10 +327,7 @@ function readSelection(
   return { providerID: primary.model.providerID, id: primary.model.id };
 }
 
-/**
- * Change detector for the poll loop, derived from the same two reads `build`
- * performs so the panel cannot render from a value the loop is not watching.
- */
+/** Change detector for the poll loop, from the same reads `build` performs. */
 function stateSignature(ctx: TuiContext): string {
   const location = ctx.location ?? ctx.data.location.default();
   const selected = readSelection(ctx, location);
