@@ -95,6 +95,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         providerTransport.set(record.provider.id, {
           ...record.provider,
           settings: { ...record.provider.settings },
+          headers: { ...record.provider.headers },
         });
       }
 
@@ -123,12 +124,16 @@ export const OpenCodeAgentRouter = Plugin.define({
       });
     });
 
-    function transportFor(
-      providerID: string,
-    ): { package?: string; settings: Record<string, unknown> } | undefined {
+    function transportFor(providerID: string):
+      | {
+          package?: string;
+          settings: Record<string, unknown>;
+          headers: Record<string, string>;
+        }
+      | undefined {
       const source = providerTransport.get(providerID);
       const settings = { ...source?.settings };
-
+      const headers = { ...source?.headers };
       // With no base URL there is nothing to forward to. Guessing a provider's
       // default endpoint would publish aliases that only fail on first use.
       if (typeof settings.baseURL !== "string") return undefined;
@@ -137,7 +142,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       // gets spread into the alias model, and provider-level fields (`id`,
       // `name`, `models`, `variants`) would clobber the alias's own identity
       // and get rejected by the model schema, taking the whole catalog down.
-      return { package: source?.package, settings };
+      return { package: source?.package, settings, headers };
     }
 
     async function discover(): Promise<DiscoveredModel[]> {
@@ -454,6 +459,7 @@ export const OpenCodeAgentRouter = Plugin.define({
           package: transport.package,
           settings: { ...transport.settings },
           body: { model: targetID },
+          headers: transport.headers,
           variants: ALIAS_VARIANTS.map((id) => ({
             id: Model.VariantID.make(id),
           })),

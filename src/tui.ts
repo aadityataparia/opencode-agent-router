@@ -30,8 +30,7 @@ interface Route {
 
 type TuiContext = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0];
 type TuiLocation = ReturnType<TuiContext["data"]["location"]["default"]>;
-type Element = any;
-type Theme = Record<string, string>;
+type Theme = TuiContext["theme"];
 
 /** Opt-in breadcrumb for verifying this plugin inside a real TUI. */
 function trace(event: string): void {
@@ -46,7 +45,7 @@ function trace(event: string): void {
 export const OpenCodeAgentRouterTui = Plugin.define({
   id: "opencode-agent-router.tui",
   setup: (ctx: TuiContext) => {
-    const theme = ctx.theme as unknown as Theme;
+    const theme = ctx.theme;
     trace(`setup version=${readVersion()}`);
 
     // Collapsed by default: the one route that matters right now. Expanding is
