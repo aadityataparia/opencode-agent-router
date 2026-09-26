@@ -143,27 +143,20 @@ function routeRow(theme, route, options) {
         justifyContent: "space-between",
         shouldFill: true,
     }, [
-        box({
-            width: LABEL_WIDTH,
-            flexShrink: 0,
-            flexDirection: "row",
-            shouldFill: false,
-        }, [
-            text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
-                `${marker}${route.agent}`,
-            ]),
+        text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
+            `${marker}${route.agent}`,
         ]),
-        text({
+        box({ paddingLeft: 2 }, text({
             fg: theme.textMuted,
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,
-            paddingLeft: 1,
         }, [
-            "↳" + options.variant
-                ? `${route.target} (${options.variant})`
-                : route.target,
-        ]),
+            "↳" +
+                (options.variant
+                    ? `${route.target} (${options.variant})`
+                    : route.target),
+        ])),
     ]);
 }
 function emptyState(theme, routes, current, expanded) {
