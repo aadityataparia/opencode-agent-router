@@ -65,34 +65,26 @@ selected target changes.
 
 ## Inspecting routes
 
-Run `/routed-models` in any session to print the model currently routed to every
-agent. The report is read from the routes that were actually published to
-OpenCode, so it always matches what a request would use right now:
+Run `/routed-models` in the TUI to see where the model you currently have
+selected actually routes. It renders a toast, for example:
 
 ```text
-/routed-models
+model-router/fixer
+routes to opencode/mimo-v2.6-flash-free
 ```
 
-```text
-Model Router (3 agents, adaptive, updated 12s ago)
-  explorer      model-router/explorer -> opencode/grok-code-fast-1
-  fixer         model-router/fixer -> opencode/claude-sonnet-4-5
-  orchestrator  model-router/orchestrator -> opencode/gpt-5
-
-_Report only. Do not summarize, comment, or ask a question in reply._
-```
-
-Agents with no routable candidate are left out of the report; the command prints a
-single explanatory line when nothing has been published yet. OpenCode starts a
-session turn after every command, so the report ends with an explicit no-reply
-instruction to keep that follow-up turn from restating the table.
+If the selected model is not a `model-router` alias, the toast says so instead.
+The command is registered by the CLI half of this plugin (`src/tui.ts`, exposed
+as the `./tui` export), so it renders in the terminal and makes **no model
+request** — unlike a server-side command, which OpenCode follows with a session
+turn that spends a call restating the output.
 
 ## Compatibility
 
-Built and tested against the OpenCode V2 plugin API (`Plugin.define`,
-`ctx.model.list()`, `ctx.provider.transform()`, `ctx.provider.reload()`, and
-`ctx.command.transform()`). The provider is registered directly through the
-provider transform API so its aliases are listed as `model-router/<agent>` rather
-than being mixed into the native `opencode` provider. `/routed-models` reports
-through a synthetic session message, so it displays the table without spending a
-model request.
+Built and tested against the OpenCode V2 plugin API: the server half uses
+`Plugin.define`, `ctx.model.list()`, `ctx.provider.transform()`, and
+`ctx.provider.reload()`; the CLI half uses `@opencode/plugin/tui` with
+`ctx.keymap.layer()` and `ctx.ui.toast.show()`. The provider is registered
+directly through the provider transform API so its aliases are listed as
+`model-router/<agent>` rather than being mixed into the native `opencode`
+provider.
