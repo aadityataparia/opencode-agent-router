@@ -31,11 +31,42 @@ presets.
 | `refreshMs` | Interval between refresh passes (default `60_000`). |
 | `strategy` | Routing strategy: `priority`, `round-robin`, `weighted`, `latency`, `rate`, `adaptive`. |
 | `minHealth` | Minimum health score for a model to be routable (default `0.2`). |
-| `probe` | Enable reachability probes (default `false`). |
-| `probeTimeoutMs` | Probe timeout per model (default `8_000`). |
+| `probe` | Ping models and route only to ones that answer (default `false`, env `OCO_ROUTER_PROBE=true`). |
+| `probeTimeoutMs` | Timeout for a single probe (default `8_000`, env `OCO_ROUTER_PROBE_TIMEOUT_MS`). |
 | `maxFallbacks` | Candidate fallbacks considered per agent (default `5`). |
 | `log` | Verbose logging (env `OCO_ROUTER_LOG=true` also enables it). |
 | `agents` | Extra agent definitions (requirement categories/weights). |
+
+## Probing
+
+The catalog lists models the endpoint advertises, which is not the same set as
+the models that actually answer. With `probe` enabled, every refresh pings each
+candidate with a one-token completion and only models that reply become routing
+candidates. Probe latency and outcome feed the same health score as real
+traffic, so scoring has something to rank on.
+
+```bash
+OCO_ROUTER_PROBE=true OCO_ROUTER_LOG=true opencode
+```
+
+How it behaves:
+
+- **Only `opencode` provider models are probed.** Aliases are created for that
+  provider alone, so probing anything else would spend requests on models the
+  router cannot select.
+- **Probes are re-checked, not repeated.** A model is re-pinged only after five
+  refresh intervals, and a model that just failed is skipped until its cooldown
+  expires, so a dead model costs one probe per cooldown rather than one per
+  refresh. Six probes run concurrently.
+- **A bad endpoint cannot empty the pool.** The probe distinguishes a verdict
+  about the model (`ModelError`, 404, timeout) from a failure that says nothing
+  about it (rejected credential, 429). Only the former removes a candidate, and
+  if *every* model fails at once the catalog is kept for that pass instead of
+  deleting every alias.
+- **Credentials matter.** Aliases forward through OpenCode's endpoint with its
+  public key, so models that need a real API key probe as `inconclusive` and are
+  kept, but they will fail on a real routed request. Configure the router
+  provider with a real key if you want paid models to be routable.
 
 ## Usage
 

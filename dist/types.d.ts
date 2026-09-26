@@ -36,6 +36,8 @@ export interface DiscoveredModel {
     lastSuccessAt?: number;
     lastFailureAt?: number;
     cooldownUntil?: number;
+    /** When this model was last pinged; drives the probe re-check interval. */
+    lastProbeAt?: number;
 }
 export interface AgentRequirements {
     categories: ModelCategory[];

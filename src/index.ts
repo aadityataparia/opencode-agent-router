@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.js";
 import { classifyModel } from "./classifier.js";
 import { HealthStore } from "./health.js";
+import { mapWithConcurrency, probeModel } from "./probe.js";
 import { findCandidates } from "./scorer.js";
 import { Router } from "./router.js";
 import {
@@ -30,6 +31,10 @@ const ROUTER_SETTINGS = {
   apiKey: "public",
 } as const;
 const OPENCODE_PROVIDER = "opencode";
+/** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
+const PROBE_CONCURRENCY = 6;
+/** Re-probe a model only after this many multiples of the refresh interval. */
+const PROBE_TTL_REFRESHES = 5;
 
 function log(enabled: boolean, ...args: unknown[]): void {
   // console.error so diagnostics surface in `--print-logs` output.
@@ -100,6 +105,103 @@ export const OpenCodeAgentRouter = Plugin.define({
         )
         .map(classifyModel);
       return health.merge(models);
+    }
+
+    /**
+     * Ping every routable model and keep only the ones that answer.
+     *
+     * A published model is not a working model: the catalog happily lists
+     * entries the endpoint will not serve, and routing to one fails on the
+     * first real request. Probing first means the candidate pool only contains
+     * models that are known to work right now, and the result also feeds
+     * health and latency so scoring has something real to rank on.
+     *
+     * Only `opencode` provider models are probed. Aliases are created for that
+     * provider alone, so probing anything else would spend requests on models
+     * the router can never select.
+     */
+    async function probeCandidates(
+      models: DiscoveredModel[],
+    ): Promise<DiscoveredModel[]> {
+      if (!config.probe) return models;
+
+      const routable = models.filter(
+        (model) => model.providerID === OPENCODE_PROVIDER,
+      );
+      const unroutable = models.length - routable.length;
+      if (unroutable > 0) {
+        log(
+          config.log,
+          `probe skipped ${unroutable} model(s) on other providers; no alias can target them`,
+        );
+      }
+
+      const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
+      const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
+
+      const results = await mapWithConcurrency(
+        routable,
+        PROBE_CONCURRENCY,
+        async (model) => {
+          const ref = `${model.providerID}/${model.modelID ?? model.id}`;
+
+          // A model that just failed stays out until its cooldown expires, so a
+          // dead model costs one probe per cooldown rather than one per refresh.
+          if (health.isCoolingDown(model)) {
+            log(config.log, `probe ${ref} skipped (cooldown)`);
+            return { model, usable: false };
+          }
+
+          if (!health.needsProbe(model, ttlMs)) {
+            return { model, usable: true };
+          }
+
+          const result = await probeModel(model, {
+            baseURL: ROUTER_SETTINGS.baseURL,
+            apiKey: ROUTER_SETTINGS.apiKey,
+            timeoutMs: config.probeTimeoutMs,
+          });
+
+          if (result.verdict !== "inconclusive") {
+            health.recordProbe(
+              model,
+              { ok: result.verdict === "ok", latencyMs: result.latencyMs },
+              cooldownMs,
+            );
+          }
+
+          log(
+            config.log,
+            result.verdict === "ok"
+              ? `probe ${ref} ok in ${result.latencyMs}ms`
+              : result.verdict === "inconclusive"
+                ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
+                : `probe ${ref} unusable: ${result.error}`,
+          );
+
+          // An inconclusive probe still reached the endpoint, so the model stays
+          // in the running; only a verdict about the model removes it.
+          return { model, usable: result.verdict !== "unusable" };
+        },
+      );
+
+      const usable = results.filter((result) => result.usable);
+
+      // Every model failing at once means the endpoint, not the catalog, is
+      // having a bad moment. Emptying the pool here would delete every alias and
+      // break routing, so keep the catalog for this pass and say so loudly.
+      if (usable.length === 0 && routable.length > 0) {
+        console.error(
+          `[opencode-agent-router] probe found no usable models (${routable.length} tried); keeping the catalog for this pass`,
+        );
+        return routable;
+      }
+
+      log(
+        config.log,
+        `probe: ${usable.length}/${routable.length} model(s) usable`,
+      );
+      return usable.map((result) => result.model);
     }
 
     async function computeAssignments(
@@ -181,8 +283,11 @@ export const OpenCodeAgentRouter = Plugin.define({
       refreshing = true;
 
       try {
-        const models = await discover();
-        log(config.log, `discovered ${models.length} models (${reason})`);
+        const discovered = await discover();
+        log(config.log, `discovered ${discovered.length} models (${reason})`);
+
+        // Probe before scoring so only working models can be selected.
+        const models = await probeCandidates(discovered);
 
         const assignments = await computeAssignments(models);
         const signature = [...assignments.entries()]
