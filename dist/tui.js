@@ -1,152 +1,217 @@
-import { appendFileSync } from "node:fs";
+import { appendFileSync, readFileSync } from "node:fs";
+import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
-const TRACE = "/private/var/folders/0g/2l9ghq956_116f7v7j53c1_m0000gn/T/opencode/router-tui-trace.log";
-function trace(event) {
-    try {
-        appendFileSync(TRACE, `${new Date().toISOString()} ${event}\n`);
-    }
-    catch { }
-}
 /**
  * Terminal-side companion to the server plugin. The router itself runs on the
- * server; this only reads the aliases the server published and renders the
- * route for the model the user currently has selected.
+ * server; this reads the aliases the server published and renders them in the
+ * OpenCode sidebar.
  *
- * Rendering here rather than through a server command matters: OpenCode starts
- * a model turn for every server command, which would spend a request to
- * restate a table the terminal can draw for free.
+ * A sidebar rather than a command: the route list is reference information, not
+ * a task. A command would cost a model turn every time it was run, and a toast
+ * would vanish before twenty routes could be read.
  */
 const ROUTER_PROVIDER = "model-router";
 const OPENCODE_PROVIDER = "opencode";
-const ROUTER_COMMAND = "routed-models";
+const LABEL_WIDTH = 14;
+const REFRESH_MS = 1_000;
+const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
+/** Opt-in breadcrumb for verifying this plugin inside a real TUI. */
+function trace(event) {
+    if (!TRACE)
+        return;
+    try {
+        appendFileSync(TRACE, `${new Date().toISOString()} ${event}\n`);
+    }
+    catch {
+        // Tracing must never break the sidebar.
+    }
+}
 export const OpenCodeAgentRouterTui = Plugin.define({
     id: "opencode-agent-router.tui",
     setup: (ctx) => {
-        trace(`setup pid=${process.pid}`);
-        // A keymap layer is owned by a component: the keymap context only exists
-        // inside a rendered slot, so creating one directly in setup fails with
-        // "Keymap.Provider is missing". Claiming the `app` slot gives the layer a
-        // component to live in for as long as the TUI runs.
-        return ctx.ui.slot({
-            append: "app",
-            render: () => {
-                trace("render app slot");
-                // TEMPORARY probe: two layers so one run reveals both whether the app
-                // slot renders at all and which mode the prompt can actually reach.
-                ctx.keymap.layer(() => ({
-                    priority: 10,
-                    mode: "global",
-                    commands: [
-                        {
-                            id: "opencode-agent-router.routed-models",
-                            title: "Show where the selected model routes",
-                            description: "Reads the current selection; makes no model request.",
-                            group: "Model Router",
-                            slash: { name: ROUTER_COMMAND },
-                            run: () => {
-                                trace("fired global");
-                                void report(ctx);
-                            },
-                        },
-                    ],
-                }));
-                ctx.keymap.layer(() => ({
-                    priority: 10,
-                    commands: [
-                        {
-                            id: "opencode-agent-router.routed-models-default",
-                            title: "Show where the selected model routes (default mode)",
-                            description: "Probe.",
-                            group: "Model Router",
-                            slash: { name: "routed-models-default" },
-                            run: () => {
-                                trace("fired default");
-                                void report(ctx);
-                            },
-                        },
-                    ],
-                }));
-                return null;
-            },
-        });
+        const theme = ctx.theme;
+        trace(`setup version=${readVersion()}`);
+        // Collapsed by default: the one route that matters right now. Expanding is
+        // an explicit act, so the sidebar stays quiet during normal work.
+        let expanded = false;
+        let disposed = false;
+        let disposeSlot;
+        const build = () => {
+            const location = ctx.location ?? ctx.data.location.default();
+            const routes = readRoutes(ctx, location);
+            const selected = readSelection(ctx, location);
+            const current = selected?.providerID === ROUTER_PROVIDER
+                ? routes.find((route) => route.agent === selected.id)
+                : undefined;
+            const visible = expanded
+                ? [
+                    ...(current ? [current] : []),
+                    ...routes.filter((route) => route.agent !== current?.agent),
+                ]
+                : current
+                    ? [current]
+                    : [];
+            trace(`render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`);
+            return column({ width: "100%", border: "rounded", borderColor: theme.borderActive, padding: 1 }, [
+                header(theme, readVersion()),
+                // The toggle doubles as the section label, so the control and the thing
+                // it controls are the same row.
+                toggleRow(theme, expanded, routes.length, () => {
+                    expanded = !expanded;
+                    trace(`toggle expanded=${expanded}`);
+                    rebuild();
+                }),
+                ...visible.map((route) => routeRow(theme, route, {
+                    current: route.agent === current?.agent,
+                    variant: route.agent === current?.agent ? selected?.variant : undefined,
+                })),
+                ...emptyState(theme, routes, current, expanded),
+            ]);
+        };
+        const claim = () => {
+            disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
+        };
+        // The host exposes no reactive hook for the sidebar's inputs, and a tree
+        // this size is cheap to rebuild, so re-claim the slot when state changes.
+        const rebuild = () => {
+            if (disposed)
+                return;
+            disposeSlot?.();
+            claim();
+            ctx.renderer.requestRender();
+        };
+        let signature = "";
+        const timer = setInterval(() => {
+            const next = stateSignature(ctx);
+            if (next === signature)
+                return;
+            signature = next;
+            trace(`change ${next}`);
+            rebuild();
+        }, REFRESH_MS);
+        claim();
+        signature = stateSignature(ctx);
+        return () => {
+            disposed = true;
+            clearInterval(timer);
+            disposeSlot?.();
+        };
     },
 });
 export default OpenCodeAgentRouterTui;
-/**
- * The prompt's selected model. `ui.model` is the documented TUI accessor but
- * is not in the installed `@opencode/plugin` types yet, so read it
- * defensively and fall back to the session's own model selection.
- */
-function currentSelection(ctx) {
-    const ui = ctx.ui;
-    trace(`probe ui.keys=${Object.keys(ctx.ui).join(",")}`);
-    trace(`probe ui.model typeof=${typeof ui.model} keys=${Object.keys(ui.model ?? {}).join(",")}`);
-    try {
-        trace(`probe ui.model.current=${JSON.stringify(ui.model?.current?.())}`);
+/* ---------------------------------------------------------------- rendering */
+function element(tag, props = {}, children = []) {
+    const node = createElement(tag);
+    for (const [key, value] of Object.entries(props)) {
+        if (value !== undefined)
+            setProp(node, key, value);
     }
-    catch (error) {
-        trace(`probe ui.model.current threw=${String(error)}`);
+    for (const child of children) {
+        if (child === null || child === undefined || child === false)
+            continue;
+        insert(node, child);
     }
-    const route = ctx.ui.router.current();
-    trace(`probe router.current=${JSON.stringify(route)}`);
-    if (route.type !== "session") {
-        try {
-            const recent = ctx.data.session
-                .list()
-                .slice(0, 3)
-                .map((s) => ({ id: s.id, model: s.model, agent: s.agent }));
-            trace(`probe session.list=${JSON.stringify(recent)}`);
-        }
-        catch (error) {
-            trace(`probe session.list threw=${String(error)}`);
-        }
-        return undefined;
-    }
-    const model = ctx.data.session.get(route.sessionID)?.model;
-    trace(`probe session.model=${JSON.stringify(model)}`);
-    return model;
+    return node;
 }
-async function report(ctx) {
-    const location = ctx.location ?? ctx.data.location.default();
-    const selected = currentSelection(ctx);
-    trace(`report location=${JSON.stringify(location)} selected=${JSON.stringify(selected)}`);
-    if (!selected) {
-        ctx.ui.toast.show({
-            title: "No model selected",
-            message: "Select a model in the prompt, then run /routed-models again.",
-            variant: "warning",
-            duration: 6_000,
-        });
-        return;
+const box = (props, children = []) => element("box", props, children);
+const text = (props, children) => element("text", props, children);
+const column = (props, children) => box({ flexDirection: "column", ...props }, children);
+/** `Model Router` badge on the left, plugin version muted on the right. */
+function header(theme, version) {
+    return box({ width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, [
+        box({ paddingLeft: 1, paddingRight: 1, backgroundColor: theme.accent }, [
+            text({ fg: theme.background }, ["Model Router"]),
+        ]),
+        text({ fg: theme.textMuted, wrapMode: "none" }, [`v${version}`]),
+    ]);
+}
+function toggleRow(theme, expanded, count, onToggle) {
+    const row = box({ width: "100%", flexDirection: "row", justifyContent: "space-between" }, [
+        text({ fg: theme.text }, [`${expanded ? "▾" : "▸"} Routes`]),
+        text({ fg: theme.textMuted, wrapMode: "none" }, [`${count}`]),
+    ]);
+    return interactive(row, theme, onToggle);
+}
+function routeRow(theme, route, options) {
+    const fg = options.current ? theme.text : theme.textMuted;
+    const marker = options.current ? "▸ " : "  ";
+    return box({ width: "100%", flexDirection: "row", justifyContent: "space-between", shouldFill: true }, [
+        box({ width: LABEL_WIDTH, flexShrink: 0, flexDirection: "row", shouldFill: false }, [
+            text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [`${marker}${route.agent}`]),
+        ]),
+        text({ fg: theme.textMuted, wrapMode: "none", truncate: true, flexShrink: 1 }, [
+            options.variant ? `${route.target} (${options.variant})` : route.target,
+        ]),
+    ]);
+}
+function emptyState(theme, routes, current, expanded) {
+    if (routes.length === 0) {
+        return [column({ width: "100%", marginTop: 1 }, [text({ fg: theme.textMuted, wrapMode: "none" }, ["No routes published"])])];
     }
-    const label = `${selected.providerID}/${selected.id}`;
-    let models = ctx.data.location.model.list(location) ?? [];
-    let match = models.find((model) => model.providerID === selected.providerID && model.id === selected.id);
-    // A miss usually means the list predates the router's latest refresh.
-    if (!match) {
-        await ctx.data.location.model.sync(location);
-        models = ctx.data.location.model.list(location) ?? [];
-        match = models.find((model) => model.providerID === selected.providerID && model.id === selected.id);
-    }
-    // The router stores the target model id, not a full reference, so resolve
-    // the provider it is forwarded to instead of assuming one.
-    const targetID = match?.body?.model;
-    if (selected.providerID !== ROUTER_PROVIDER || typeof targetID !== "string") {
-        ctx.ui.toast.show({
-            title: label,
-            message: `is not a Model Router alias. Select a ${ROUTER_PROVIDER}/<agent> model to see its route.`,
-            variant: "warning",
-            duration: 6_000,
-        });
-        return;
-    }
-    const target = models.find((model) => model.providerID === OPENCODE_PROVIDER && model.id === targetID);
-    const targetLabel = target ? `${OPENCODE_PROVIDER}/${targetID}` : targetID;
-    trace(`toast ${ROUTER_PROVIDER}/${selected.id} -> ${targetLabel}`);
-    ctx.ui.toast.show({
-        title: `${ROUTER_PROVIDER}/${selected.id}`,
-        message: `routes to ${targetLabel}`,
-        variant: "info",
-        duration: 6_000,
+    if (expanded || current)
+        return [];
+    return [column({ width: "100%", marginTop: 1 }, [text({ fg: theme.textMuted, wrapMode: "none" }, [`Select a ${ROUTER_PROVIDER} model`])])];
+}
+/** Hover feedback and activation, matching the host's other sidebar rows. */
+function interactive(node, theme, onActivate) {
+    setProp(node, "onMouseOver", () => {
+        setProp(node, "backgroundColor", theme.background);
     });
+    setProp(node, "onMouseOut", () => {
+        setProp(node, "backgroundColor", undefined);
+    });
+    setProp(node, "onMouseUp", () => onActivate());
+    return node;
+}
+/* -------------------------------------------------------------------- state */
+/** Live routes, read from the alias inventory the server published. */
+function readRoutes(ctx, location) {
+    const models = ctx.data.location.model.list(location) ?? [];
+    return models
+        .filter((model) => model.providerID === ROUTER_PROVIDER && typeof model.body?.model === "string")
+        .map((model) => ({ agent: model.id, target: String(model.body?.model) }))
+        .sort((a, b) => a.agent.localeCompare(b.agent));
+}
+/**
+ * The model in use right now.
+ *
+ * The prompt's own selection is not exposed to plugins in this OpenCode version
+ * — `ui` carries only dialog, toast, format, router, panel, tabs and slot — so a
+ * session is read from its own record, which holds the unrouted alias
+ * (`model-router/<agent>`) rather than the resolved model. Off a session there
+ * is no record, so the primary agent's configured model stands in, since that
+ * is what a new session here would start on.
+ */
+function readSelection(ctx, location) {
+    const route = ctx.ui.router.current();
+    if (route.type === "session") {
+        const model = ctx.data.session.get(route.sessionID)?.model;
+        return model
+            ? { providerID: model.providerID, id: model.id, variant: model.variant }
+            : undefined;
+    }
+    const agents = ctx.data.location.agent.list(location) ?? [];
+    const primary = agents.find((agent) => agent.mode === "primary");
+    if (!primary?.model)
+        return undefined;
+    return { providerID: primary.model.providerID, id: primary.model.id };
+}
+/** Cheap change detector for the poll loop. */
+function stateSignature(ctx) {
+    const route = ctx.ui.router.current();
+    const session = route.type === "session" ? ctx.data.session.get(route.sessionID) : undefined;
+    const routes = readRoutes(ctx, ctx.location ?? ctx.data.location.default())
+        .map((route) => `${route.agent}=${route.target}`)
+        .join(",");
+    return `${session?.model?.providerID ?? ""}/${session?.model?.id ?? ""}#${routes}`;
+}
+function readVersion() {
+    try {
+        const raw = readFileSync(new URL("../package.json", import.meta.url), "utf8");
+        const parsed = JSON.parse(raw);
+        return parsed.version ?? "0.0.0";
+    }
+    catch {
+        return "0.0.0";
+    }
 }

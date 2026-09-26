@@ -65,26 +65,54 @@ selected target changes.
 
 ## Inspecting routes
 
-Run `/routed-models` in the TUI to see where the model you currently have
-selected actually routes. It renders a toast, for example:
+The TUI half of the plugin adds a **Model Router** panel to the sidebar. It shows
+the model the current selection routes to:
 
 ```text
-model-router/fixer
-routes to opencode/mimo-v2.6-flash-free
+┌────────────────────────────────┐
+│ Model Router            v0.1.0 │
+│                                │
+│ ▸ Routes                       │
+│ ▸ fixer    mimo-v2.6-flash-free │
+└────────────────────────────────┘
 ```
 
-If the selected model is not a `model-router` alias, the toast says so instead.
-The command is registered by the CLI half of this plugin (`src/tui.ts`, exposed
-as the `./tui` export), so it renders in the terminal and makes **no model
-request** — unlike a server-side command, which OpenCode follows with a session
-turn that spends a call restating the output.
+Collapsed by default, so it stays out of the way. Click **▸ Routes** to expand it
+and list every agent with its current target, current one first:
+
+```text
+│ ▾ Routes                  20   │
+│ ▸ fixer    mimo-v2.6-flash-free │
+│   explorer grok-code-fast-1     │
+│   oracle   gpt-5                │
+│   ...                           │
+```
+
+The highlighted `▸` row is the session's own model, read from the session record
+so it reflects what a request would actually use. Off a session the primary
+agent's configured model stands in, since that is what a new session would start
+on.
+
+The panel renders in the terminal and makes **no model request**. A slash command
+would not: OpenCode starts a session turn after every command, so a command that
+prints a route table costs a call to restate it.
+
+Set `OPENCODE_AGENT_ROUTER_TRACE` to a file path to log what the panel renders
+(selection resolved, route changes, expand/collapse) when debugging it in a real
+TUI.
 
 ## Compatibility
 
 Built and tested against the OpenCode V2 plugin API: the server half uses
 `Plugin.define`, `ctx.model.list()`, `ctx.provider.transform()`, and
-`ctx.provider.reload()`; the CLI half uses `@opencode/plugin/tui` with
-`ctx.keymap.layer()` and `ctx.ui.toast.show()`. The provider is registered
-directly through the provider transform API so its aliases are listed as
-`model-router/<agent>` rather than being mixed into the native `opencode`
-provider.
+`ctx.provider.reload()`; the CLI half uses `@opencode/plugin/tui` and claims the
+`sidebar.content` slot. The provider is registered directly through the provider
+transform API so its aliases are listed as `model-router/<agent>` rather than
+being mixed into the native `opencode` provider.
+
+The TUI half declares no dependency on `@opentui/solid`: the host injects it at
+runtime, the same way it provides `@opencode/plugin/tui`, so the module is
+declared locally in `src/opentui.d.ts` for typechecking instead of being
+vendored. If a future OpenCode version stops injecting it, the sidebar is the
+only thing that breaks.
+
