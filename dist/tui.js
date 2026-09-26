@@ -196,13 +196,39 @@ function interactive(node, onActivate) {
     return node;
 }
 /* -------------------------------------------------------------------- state */
+/**
+ * Map of endpoint -> provider id.
+ *
+ * An alias no longer implies the `opencode` provider: it forwards to whichever
+ * provider won routing, and carries that provider's endpoint in its own
+ * settings. Resolving the endpoint back to a provider id is what lets the panel
+ * name the provider instead of showing a bare model id that could belong to
+ * several of them.
+ */
+function providerEndpointIndex(ctx, location) {
+    const index = new Map();
+    for (const provider of ctx.data.location.provider.list(location) ?? []) {
+        if (provider.id === ROUTER_PROVIDER)
+            continue;
+        const baseURL = provider.settings?.baseURL;
+        if (typeof baseURL === "string")
+            index.set(baseURL, provider.id);
+    }
+    return index;
+}
 /** Live routes, read from the alias inventory the server published. */
 function readRoutes(ctx, location) {
     const models = ctx.data.location.model.list(location) ?? [];
+    const byEndpoint = providerEndpointIndex(ctx, location);
     return models
         .filter((model) => model.providerID === ROUTER_PROVIDER &&
         typeof model.body?.model === "string")
-        .map((model) => ({ agent: model.id, target: String(model.body?.model) }))
+        .map((model) => {
+        const id = String(model.body?.model);
+        const baseURL = model.settings?.baseURL;
+        const provider = typeof baseURL === "string" ? byEndpoint.get(baseURL) : undefined;
+        return { agent: model.id, target: provider ? `${provider}/${id}` : id };
+    })
         .sort((a, b) => a.agent.localeCompare(b.agent));
 }
 /**

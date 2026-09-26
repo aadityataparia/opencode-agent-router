@@ -19,14 +19,6 @@ import { Model, Plugin, Provider } from "@opencode/plugin";
  */
 const ROUTER_PROVIDER = "model-router";
 const ROUTER_PROVIDER_NAME = "Model Router";
-const ROUTER_PACKAGE = "@opencode/ai/providers/openai-compatible";
-const ROUTER_SETTINGS = {
-    // The native OpenCode provider uses this endpoint. The public key is the
-    // same credential used by the built-in OpenCode inference provider.
-    baseURL: "https://opencode.ai/zen/v1",
-    apiKey: "public",
-};
-const OPENCODE_PROVIDER = "opencode";
 /** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
 const PROBE_CONCURRENCY = 6;
 /** Re-probe a model only after this many multiples of the refresh interval. */
@@ -60,6 +52,15 @@ export const OpenCodeAgentRouter = Plugin.define({
         /** Agent -> model ref, forced by `/router pin`. Session-only by design. */
         const pins = new Map();
         /**
+         * Transport details of every provider, refreshed on each transform pass.
+         *
+         * An alias carries the endpoint it forwards to, so the router can front any
+         * provider rather than only the one whose gateway it was built against.
+         * Reading this inside the transform is what keeps it fresh: the editor is the
+         * only place that sees providers other plugins have contributed.
+         */
+        const providerTransport = new Map();
+        /**
          * Keep one provider transform registered for the lifetime of the plugin.
          * The transform reads mutable state so periodic refreshes do not stack
          * registrations or retain stale aliases.
@@ -67,12 +68,21 @@ export const OpenCodeAgentRouter = Plugin.define({
         const providerRegistration = await ctx.provider.transform((editor) => {
             const providerID = Provider.ID.make(ROUTER_PROVIDER);
             const existing = editor.get(ROUTER_PROVIDER);
+            // Snapshot before mutating, so the router's own entry never becomes the
+            // source of truth for what a target provider looks like.
+            providerTransport.clear();
+            for (const record of editor.list()) {
+                if (record.provider.id === ROUTER_PROVIDER)
+                    continue;
+                providerTransport.set(record.provider.id, {
+                    ...record.provider,
+                    settings: { ...record.provider.settings },
+                });
+            }
             if (existing) {
                 editor.update(ROUTER_PROVIDER, (provider) => {
                     provider.name = ROUTER_PROVIDER_NAME;
-                    provider.package = ROUTER_PACKAGE;
                     provider.activation = "enabled";
-                    provider.settings = { ...ROUTER_SETTINGS };
                 });
                 // Preserve models owned by other transforms/plugins; replace only the
                 // aliases this plugin owns.
@@ -84,13 +94,20 @@ export const OpenCodeAgentRouter = Plugin.define({
                 info: {
                     ...Provider.Info.empty(providerID),
                     name: ROUTER_PROVIDER_NAME,
-                    package: ROUTER_PACKAGE,
                     activation: "enabled",
-                    settings: { ...ROUTER_SETTINGS },
                 },
                 models: routerModels,
             });
         });
+        function transportFor(providerID) {
+            const source = providerTransport.get(providerID);
+            const settings = { ...source?.settings };
+            // With no base URL there is nothing to forward to. Guessing a provider's
+            // default endpoint would publish aliases that only fail on first use.
+            if (typeof settings.baseURL !== "string")
+                return undefined;
+            return { ...source, settings };
+        }
         async function discover() {
             const catalog = await ctx.model.list();
             // Exclude our own aliases from the candidate pool so routing never
@@ -123,9 +140,10 @@ export const OpenCodeAgentRouter = Plugin.define({
          * models that are known to work right now, and the result also feeds
          * health and latency so scoring has something real to rank on.
          *
-         * Only `opencode` provider models are probed. Aliases are created for that
-         * provider alone, so probing anything else would spend requests on models
-         * the router can never select.
+         * Every provider with a known endpoint is probed, each against its own
+         * endpoint and credentials. A provider that needs no credential (a local
+         * Ollama) is probed without an `Authorization` header rather than with a
+         * placeholder that some gateways reject outright.
          *
          * `force` comes from an explicit `/router refresh`. It bypasses both the
          * probe cache and the cooldown, because the moment a user forces a refresh
@@ -136,11 +154,10 @@ export const OpenCodeAgentRouter = Plugin.define({
         async function probeCandidates(models, force = false) {
             if (!config.probe)
                 return { models, probed: 0, usable: 0 };
-            const routable = models.filter((model) => model.providerID === OPENCODE_PROVIDER);
-            const unroutable = models.length - routable.length;
-            if (unroutable > 0) {
-                log(config.log, `probe skipped ${unroutable} model(s) on other providers; no alias can target them`);
-            }
+            // Every model is probeable. The request goes through OpenCode, which
+            // resolves each provider's own endpoint, SDK and credentials, so the
+            // router looks nothing up and excludes nothing up front.
+            const routable = models;
             const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
             const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
             /** providerID -> models rejected for auth on this pass. */
@@ -161,9 +178,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 if (!force && !health.needsProbe(model, ttlMs)) {
                     return { model, usable: true, probed: false };
                 }
-                const result = await probeModel(model, {
-                    baseURL: ROUTER_SETTINGS.baseURL,
-                    apiKey: ROUTER_SETTINGS.apiKey,
+                const result = await probeModel(model, model.providerID, {
+                    generate: ctx.generate.text,
                     timeoutMs: config.probeTimeoutMs,
                 });
                 if (result.verdict !== "inconclusive") {
@@ -229,7 +245,11 @@ export const OpenCodeAgentRouter = Plugin.define({
             // break routing, so keep the catalog for this pass and say so loudly.
             if (usable.length === 0 && routable.length > 0) {
                 console.error(`[opencode-agent-router] probe found no usable models (${routable.length} tried); keeping the catalog for this pass`);
-                return { models: routable, probed: stats.probed, usable: routable.length };
+                return {
+                    models: routable,
+                    probed: stats.probed,
+                    usable: routable.length,
+                };
             }
             log(config.log, `probe: ${usable.length}/${routable.length} model(s) usable`);
             return {
@@ -300,16 +320,20 @@ export const OpenCodeAgentRouter = Plugin.define({
             const providerID = Provider.ID.make(ROUTER_PROVIDER);
             const aliases = [];
             for (const [agentName, target] of assignments) {
-                // The router endpoint is OpenCode's endpoint, so only forward model
-                // IDs that are valid there.
-                if (target.providerID !== OPENCODE_PROVIDER) {
-                    log(config.log, `${agentName}: target ${target.providerID}/${target.modelID ?? target.id} is not on the opencode provider; no alias created`);
+                const transport = transportFor(target.providerID);
+                if (!transport) {
+                    log(config.log, `${agentName}: no known endpoint for provider ${target.providerID}; no alias created`);
                     continue;
                 }
                 const targetID = target.modelID ?? target.id;
                 aliases.push({
                     ...Model.Info.default(providerID, Model.ID.make(agentName)),
                     name: `${agentName} (routed)`,
+                    // The alias carries the target provider's own endpoint, SDK and
+                    // credentials, so one router provider can front any provider while the
+                    // `model-router/<agent>` reference the agent points at stays put.
+                    ...(transport.package ? { package: transport.package } : {}),
+                    settings: transport.settings,
                     body: { model: targetID },
                 });
             }
@@ -378,7 +402,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 routedAgents: routedAgentNames(),
                 discovered: catalog.length,
                 routable: lastPoolSize,
-                coolingDown: catalog.filter((model) => health.isCoolingDown(model)).length,
+                coolingDown: catalog.filter((model) => health.isCoolingDown(model))
+                    .length,
                 authBlocked: [...authBlocked.entries()].sort(([a], [b]) => a.localeCompare(b)),
                 lastRun,
                 refreshMs: config.refreshMs,
@@ -430,11 +455,14 @@ export const OpenCodeAgentRouter = Plugin.define({
                                 await say("Refresh failed. The published aliases were left untouched; see the log for the error.");
                                 return;
                             }
-                            const probeNote = lastRun && config.probe
-                                ? ` ${lastRun.usable}/${lastRun.probed} probed model(s) usable.`
-                                : "";
+                            // Do not claim work that did not happen. With probing off, a
+                            // refresh is only a catalog re-scan, and saying "re-probed" would
+                            // imply the pool was revalidated when it was not.
+                            const probeNote = config.probe
+                                ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
+                                : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
                             await say(outcome.status === "changed"
-                                ? `Re-scanned and re-probed. ${outcome.assignments} agent(s) routed.${probeNote}`
+                                ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
                                 : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`);
                             return;
                         }
@@ -454,11 +482,12 @@ export const OpenCodeAgentRouter = Plugin.define({
                                     : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
                                 return;
                             }
-                            // An alias can only forward to the opencode provider. Pinning
-                            // anything else would silently delete that agent's alias, which
-                            // looks like the pin "broke" the agent rather than being refused.
-                            if (target.providerID !== OPENCODE_PROVIDER) {
-                                await say(`\`${modelRef(target)}\` is on the \`${target.providerID}\` provider, but aliases can only target \`${OPENCODE_PROVIDER}\`. Pin refused.`);
+                            // An alias can only forward somewhere it knows how to reach.
+                            // Pinning a provider with no known endpoint would silently delete
+                            // that agent's alias, which looks like the pin "broke" the agent
+                            // rather than being refused.
+                            if (!transportFor(target.providerID)) {
+                                await say(`\`${modelRef(target)}\` is on the \`${target.providerID}\` provider, which has no known endpoint in the config, so an alias cannot forward to it. Pin refused.`);
                                 return;
                             }
                             pins.set(parsed.agent, modelRef(target));

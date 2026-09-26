@@ -40,8 +40,40 @@ Pins are **session-only** and live in memory; they are lost on restart. A pin
 resolves against the full catalog rather than the probed pool, so a pinned model
 that is momentarily unhealthy is still honoured and shown as such rather than
 silently swapped. A pin that no longer resolves is reported in the status table
-instead of quietly reverting. Pins on models outside the `opencode` provider are
-refused, since aliases can only target that provider.
+instead of quietly reverting. Pins on a provider with no known endpoint are
+refused, since an alias cannot forward to one.
+
+## Providers
+
+**Probing asks OpenCode to make the call.** A probe is issued through
+`ctx.generate.text()` against a specific `provider/id`, so OpenCode resolves the
+endpoint, the SDK package and the credentials itself. The router never reads a
+`baseURL` or an API key to probe, which means probing sees exactly what real
+traffic sees: providers authenticated through `opencode auth login` work, and a
+provider with a native API is probed the way it is actually called rather than
+through an assumed OpenAI-compatible surface. Every model in the catalog is
+probeable, so none is excluded up front.
+
+**Aliases do carry the target's transport.** An alias is not tied to one
+gateway. Each published alias carries the target provider's own endpoint,
+credentials and SDK package, so the single `model-router` provider can front
+**any** provider while the `model-router/<agent>` reference an agent points at
+stays put — switching a route from a hosted model to a local Ollama model
+changes nothing the agent has to know about.
+
+This is the one place the router reads provider transport, and it cannot be
+avoided: an alias is a model entry on the `model-router` provider, so something
+has to say which endpoint it forwards to. The alternative — one router provider
+per upstream — would force agents to repoint their model reference every time
+routing crossed providers, which is the one thing this plugin exists to prevent.
+
+An alias is therefore built only for a provider with a reachable endpoint: a
+`baseURL` in its config `options`, or the built-in `opencode` provider whose
+endpoint the router already knows. A provider with no reachable endpoint is
+skipped and logged rather than published as an alias that would fail on first
+use. Note the asymmetry with probing: a provider authenticated purely through
+`opencode auth login` probes fine, but the router cannot read that credential to
+put it on an alias, so such a provider is not aliased.
 
 ## How it works
 
@@ -159,9 +191,9 @@ OCO_ROUTER_PROBE=true OCO_ROUTER_LOG=true opencode
 
 How it behaves:
 
-- **Only `opencode` provider models are probed.** Aliases are created for that
-  provider alone, so probing anything else would spend requests on models the
-  router cannot select.
+- **Probes go through OpenCode's own generate call**, so each provider is
+  exercised the way real traffic reaches it — its own endpoint, SDK and
+  credentials, including ones held in the auth store.
 - **Probes are re-checked, not repeated.** A model is re-pinged only after five
   refresh intervals, and a model that just failed is skipped until its cooldown
   expires, so a dead model costs one probe per cooldown rather than one per
