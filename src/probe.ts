@@ -7,9 +7,10 @@ import type { DiscoveredModel } from "./types";
  */
 
 /**
- * `ok` answered · `unusable` the endpoint will not serve it · `unauthorized` the
+ * `ok` answered · `unusable` the endpoint will not serve it, including a quota
+ * that is spent rather than momentarily throttled · `unauthorized` the
  * credential was rejected (not the model's fault, but it still cannot serve
- * traffic) · `inconclusive` the probe could not tell, and must never shrink the
+ * traffic) · `inconclusive` a transient throttle, which must never shrink the
  * pool on its own.
  */
 export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
@@ -70,13 +71,13 @@ function describe(error: unknown): string {
  * matched textually; the status code is preferred where one is present.
  */
 function classify(status: number | undefined, detail: string): ProbeVerdict {
-  // Throttling is transient and says nothing about the model.
-  if (status === 429) return "inconclusive";
   if (
+    status === 429 ||
     /\b(429)\b/.test(detail) ||
-    /rate.?limit|too many requests|quota exceeded/i.test(detail)
+    /rate.?limit|too many requests/i.test(detail)
   ) {
-    return "inconclusive";
+    if (/per.?second|per.?minute/i.test(detail)) return "inconclusive";
+    return "unusable";
   }
 
   // Not the model's fault, but it cannot serve traffic until the provider is back.

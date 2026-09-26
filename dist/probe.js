@@ -32,12 +32,12 @@ function describe(error) {
  * matched textually; the status code is preferred where one is present.
  */
 function classify(status, detail) {
-    // Throttling is transient and says nothing about the model.
-    if (status === 429)
-        return "inconclusive";
-    if (/\b(429)\b/.test(detail) ||
-        /rate.?limit|too many requests|quota exceeded/i.test(detail)) {
-        return "inconclusive";
+    if (status === 429 ||
+        /\b(429)\b/.test(detail) ||
+        /rate.?limit|too many requests/i.test(detail)) {
+        if (/per.?second|per.?minute/i.test(detail))
+            return "inconclusive";
+        return "unusable";
     }
     // Not the model's fault, but it cannot serve traffic until the provider is back.
     if (status === 401 || status === 403)

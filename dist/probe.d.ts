@@ -5,9 +5,10 @@ import type { DiscoveredModel } from "./types";
  * way to reach credentials held in the auth store rather than the config.
  */
 /**
- * `ok` answered · `unusable` the endpoint will not serve it · `unauthorized` the
+ * `ok` answered · `unusable` the endpoint will not serve it, including a quota
+ * that is spent rather than momentarily throttled · `unauthorized` the
  * credential was rejected (not the model's fault, but it still cannot serve
- * traffic) · `inconclusive` the probe could not tell, and must never shrink the
+ * traffic) · `inconclusive` a transient throttle, which must never shrink the
  * pool on its own.
  */
 export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
