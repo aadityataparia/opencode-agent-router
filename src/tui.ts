@@ -212,8 +212,7 @@ function routeRow(
       text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
         `${marker}${route.agent}`,
       ]),
-      box(
-        { paddingLeft: 2 },
+      box({ paddingLeft: 2 }, [
         text(
           {
             fg: theme.textMuted,
@@ -228,7 +227,7 @@ function routeRow(
                 : route.target),
           ],
         ),
-      ),
+      ]),
     ],
   );
 }
