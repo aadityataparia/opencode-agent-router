@@ -55,6 +55,63 @@ export const OpenCodeAgentRouter = Plugin.define({
     // a refresh pass so the command can report what is actually published.
     let catalog: DiscoveredModel[] = [];
     let currentAssignments = new Map<AgentName, DiscoveredModel>();
+
+    /**
+     * The last decided mapping, kept in the plugin's durable store.
+     *
+     * Two things depend on it. A restart would otherwise publish agents with no
+     * model until the first probe pass finished, which is long enough for a
+     * dispatch to fail. And it is what a new session reads: the transform runs
+     * once per agent load, so without a remembered mapping a session started
+     * between two passes would find `model-router/<agent>` unresolved.
+     *
+     * Held separately from `currentAssignments` so a restored entry never
+     * reaches the status table pretending to be a catalog model with real health.
+     */
+    const STORAGE_KEY = "assignments";
+    const assignedRefs = new Map<string, { providerID: string; modelID: string }>();
+
+    async function loadAssignments(): Promise<void> {
+      try {
+        const raw = await ctx.storage.get(STORAGE_KEY);
+        if (!raw || typeof raw !== "object") return;
+        for (const [agent, value] of Object.entries(raw)) {
+          if (typeof value !== "object" || value === null) continue;
+          const ref = value as { providerID?: unknown; modelID?: unknown };
+          if (typeof ref.providerID !== "string") continue;
+          if (typeof ref.modelID !== "string") continue;
+          assignedRefs.set(agent, {
+            providerID: ref.providerID,
+            modelID: ref.modelID,
+          });
+        }
+        if (assignedRefs.size > 0) {
+          log(config.log, `restored ${assignedRefs.size} assignment(s) from storage`);
+        }
+      } catch (error) {
+        log(config.log, `could not read stored assignments: ${String(error)}`);
+      }
+    }
+
+    async function saveAssignments(
+      assignments: ReadonlyMap<AgentName, DiscoveredModel>,
+    ): Promise<void> {
+      try {
+        const payload: Record<string, { providerID: string; modelID: string }> = {};
+        for (const [agent, model] of assignments) {
+          const modelID = model.modelID ?? model.id;
+          payload[agent] = { providerID: model.providerID, modelID };
+          assignedRefs.set(agent, { providerID: model.providerID, modelID });
+        }
+        for (const agent of [...assignedRefs.keys()]) {
+          if (!(agent in payload)) assignedRefs.delete(agent);
+        }
+        await ctx.storage.set(STORAGE_KEY, payload);
+      } catch (error) {
+        log(config.log, `could not persist assignments: ${String(error)}`);
+      }
+    }
+
     let lastRun:
       | { at: number; reason: string; probed: number; usable: number }
       | undefined;
@@ -67,7 +124,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     const agentRegistration = await ctx.agent.transform((editor) => {
       let assigned = 0;
       const failed: string[] = [];
-      for (const [agentName, model] of currentAssignments) {
+      for (const [agentName, ref] of assignedRefs) {
         const id = routerAgentID(agentName);
         try {
           // `update` is an upsert: the id need not exist yet. Gating on
@@ -78,8 +135,8 @@ export const OpenCodeAgentRouter = Plugin.define({
             agent.name = Agent.Name.make(agentName);
             // providerID and id are separate fields, not one `provider/model` ref.
             agent.model = {
-              providerID: Provider.ID.make(model.providerID),
-              id: Model.ID.make(model.modelID ?? model.id),
+              providerID: Provider.ID.make(ref.providerID),
+              id: Model.ID.make(ref.modelID),
             };
           });
           assigned += 1;
@@ -89,7 +146,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       }
       log(
         config.log,
-        `agent transform: ${assigned}/${currentAssignments.size} assigned` +
+        `agent transform: ${assigned}/${assignedRefs.size} assigned` +
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
       );
     });
@@ -113,6 +170,9 @@ export const OpenCodeAgentRouter = Plugin.define({
       );
     }
 
+    // Restored before the first reload, so a restart or a fresh session finds a
+    // model already assigned rather than waiting on the first probe pass.
+    await loadAssignments();
     await ctx.agent.reload();
 
     async function discover(): Promise<DiscoveredModel[]> {
@@ -370,6 +430,9 @@ export const OpenCodeAgentRouter = Plugin.define({
 
         const assignments = await computeAssignments(models, discovered);
         currentAssignments = assignments;
+        // Persisted before the reload below, so the transform and every session
+        // that starts before the next pass see the same mapping.
+        await saveAssignments(assignments);
         lastRun = {
           at: Date.now(),
           reason,
