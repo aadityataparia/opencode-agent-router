@@ -4,14 +4,14 @@ import { Plugin } from "@opencode/plugin/tui";
 
 /**
  * Terminal-side companion to the server plugin. The router itself runs on the
- * server; this reads the aliases the server published and renders them in the
+ * server; this reads the routed agents it maintains and renders them in the
  * OpenCode sidebar.
  *
  * A sidebar rather than a command: the route list is reference information, not
  * a task. A command would cost a model turn every time it was run, and a toast
  * would vanish before twenty routes could be read.
  */
-const ROUTER_PROVIDER = "model-router";
+const ROUTER_AGENT_PREFIX = "model-router/";
 const LABEL_WIDTH = 14;
 const REFRESH_MS = 1_000;
 
@@ -58,10 +58,14 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       const location = ctx.location ?? ctx.data.location.default();
       const routes = readRoutes(ctx, location);
       const selected = readSelection(ctx, location);
-      const current =
-        selected?.providerID === ROUTER_PROVIDER
-          ? routes.find((route) => route.agent === selected.id)
-          : undefined;
+      // The selection is a real model, so the current route is whichever routed
+      // agent currently points at it — not an agent whose id matches it.
+      const selectedRef = selected
+        ? `${selected.providerID}/${selected.id}`
+        : undefined;
+      const current = selectedRef
+        ? routes.find((route) => route.target === selectedRef)
+        : undefined;
 
       const visible = expanded
         ? [
@@ -265,7 +269,7 @@ function emptyState(
   return [
     column({ width: "100%", marginTop: 1 }, [
       text({ fg: theme.textMuted, wrapMode: "none" }, [
-        `Select a ${ROUTER_PROVIDER} model`,
+        "Not on a routed model",
       ]),
     ]),
   ];
@@ -285,46 +289,29 @@ function interactive(node: Element, onActivate: () => void): Element {
 /* -------------------------------------------------------------------- state */
 
 /**
- * Map of endpoint -> provider id.
+ * Live routes, read from the agents the server maintains.
  *
- * An alias no longer implies the `opencode` provider: it forwards to whichever
- * provider won routing, and carries that provider's endpoint in its own
- * settings. Resolving the endpoint back to a provider id is what lets the panel
- * name the provider instead of showing a bare model id that could belong to
- * several of them.
+ * Each `model-router/<agent>` agent names the real model routing chose for it,
+ * so the route is simply that model reference — no endpoint reverse-mapping
+ * needed, because the agent states the provider outright. An agent with no model
+ * is not a route: nothing has been assigned to it yet, and listing it with an
+ * empty target would read as a broken one rather than an unassigned one.
  */
-function providerEndpointIndex(
-  ctx: TuiContext,
-  location: TuiLocation,
-): Map<string, string> {
-  const index = new Map<string, string>();
-  for (const provider of ctx.data.location.provider.list(location) ?? []) {
-    if (provider.id === ROUTER_PROVIDER) continue;
-    const baseURL = provider.settings?.baseURL;
-    if (typeof baseURL === "string") index.set(baseURL, provider.id);
-  }
-  return index;
-}
-
-/** Live routes, read from the alias inventory the server published. */
 function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
-  const models = ctx.data.location.model.list(location) ?? [];
-  const byEndpoint = providerEndpointIndex(ctx, location);
+  const agents = ctx.data.location.agent.list(location) ?? [];
+  const routes: Route[] = [];
 
-  return models
-    .filter(
-      (model) =>
-        model.providerID === ROUTER_PROVIDER &&
-        typeof model.body?.model === "string",
-    )
-    .map((model) => {
-      const id = String(model.body?.model);
-      const baseURL = model.settings?.baseURL;
-      const provider =
-        typeof baseURL === "string" ? byEndpoint.get(baseURL) : undefined;
-      return { agent: model.id, target: provider ? `${provider}/${id}` : id };
-    })
-    .sort((a, b) => a.agent.localeCompare(b.agent));
+  for (const agent of agents) {
+    if (!agent.id.startsWith(ROUTER_AGENT_PREFIX)) continue;
+    const model = agent.model;
+    if (!model) continue;
+    routes.push({
+      agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
+      target: `${model.providerID}/${model.id}`,
+    });
+  }
+
+  return routes.sort((a, b) => a.agent.localeCompare(b.agent));
 }
 
 /**
@@ -332,8 +319,8 @@ function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
  *
  * The prompt's own selection is not exposed to plugins in this OpenCode version
  * — `ui` carries only dialog, toast, format, router, panel, tabs and slot — so a
- * session is read from its own record, which holds the unrouted alias
- * (`model-router/<agent>`) rather than the resolved model. Off a session there
+ * session is read from its own record, which holds the real model its routed
+ * agent resolved to. Off a session there
  * is no record, so the primary agent's configured model stands in, since that
  * is what a new session here would start on.
  */

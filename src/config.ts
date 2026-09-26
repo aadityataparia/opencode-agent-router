@@ -220,9 +220,6 @@ export function loadConfig(
     ),
     probe: resolve.boolean("probe", false),
     probeTimeoutMs: resolve.positiveNumber("probeTimeoutMs", 8_000),
-    // Opt-in: resolving a key means reading OpenCode's own credential store,
-    // which has no read API and is therefore a private schema. Off unless asked.
-    credentials: resolve.boolean("credentials", false),
     strategy: resolve.strategy("strategy", "adaptive"),
     minHealth: resolve.clampedNumber("minHealth", 0.2, 0, 1),
     log: verbose,

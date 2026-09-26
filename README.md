@@ -40,59 +40,71 @@ Pins are **session-only** and live in memory; they are lost on restart. A pin
 resolves against the full catalog rather than the probed pool, so a pinned model
 that is momentarily unhealthy is still honoured and shown as such rather than
 silently swapped. A pin that no longer resolves is reported in the status table
-instead of quietly reverting. Pins on a provider with no known endpoint are
-refused, since an alias cannot forward to one.
+instead of quietly reverting.
+
+## Agents
+
+**The router points an agent at a real model.** It owns one agent per managed
+role, named `model-router/<agent>`, and each refresh sets that agent's `model` to
+whichever real model won routing:
+
+```ts
+await ctx.agent.transform((editor) => {
+  for (const [agentID, model] of resolved) {
+    editor.update(agentID, (agent) => {
+      agent.model = model;
+    });
+  }
+});
+```
+
+Because the agent names a real model, OpenCode resolves that provider's endpoint,
+SDK package and credential itself. The router reads no `baseURL` and no API key
+for traffic — only for probing, and probing already goes through
+`ctx.generate.text()`. A role keeps the same `model-router/<agent>` id while its
+underlying model moves between a hosted provider and a local Ollama one, because
+nothing about the reference the caller holds changes.
+
+Two constraints follow from `AgentEditor`, which is worth knowing before
+configuring this:
+
+- **It has no `add`.** `list`, `get`, `default`, `update`, `remove` — an agent
+  that does not exist yet cannot be created here. Every `model-router/<agent>` id
+  has to be declared in config (or by a preset) or the transform has nothing to
+  fill in, and the router logs that it was skipped.
+- **A configured model wins.** Declaring the agent *with* a model opts that role
+  out of routing, so the ids are declared empty.
+
+```json
+{
+  "agent": {
+    "model-router/orchestrator": {},
+    "model-router/oracle": {},
+    "model-router/explorer": {}
+  }
+}
+```
+
+The trade this design gives up: a caller can no longer select one of these
+through a model picker, because there is no such model. Dispatch by agent id.
 
 ## Providers
 
 **Probing asks OpenCode to make the call.** A probe is issued through
 `ctx.generate.text()` against a specific `provider/id`, so OpenCode resolves the
-endpoint, the SDK package and the credentials itself. The router never reads a
-`baseURL` or an API key to probe, which means probing sees exactly what real
-traffic sees: providers authenticated through `opencode auth login` work, and a
-provider with a native API is probed the way it is actually called rather than
-through an assumed OpenAI-compatible surface. Every model in the catalog is
-probeable, so none is excluded up front.
+endpoint, the SDK package and the credentials itself. Probing therefore sees
+exactly what real traffic sees: providers authenticated through
+`opencode auth login` work, and a provider with a native API is probed the way it
+is actually called rather than through an assumed OpenAI-compatible surface.
+Every model in the catalog is probeable, so none is excluded up front.
 
-**Aliases do carry the target's transport.** An alias is not tied to one
-gateway. Each published alias carries the target provider's own endpoint,
-credentials and SDK package, so the single `model-router` provider can front
-**any** provider while the `model-router/<agent>` reference an agent points at
-stays put — switching a route from a hosted model to a local Ollama model
-changes nothing the agent has to know about.
-
-This is the one place the router reads provider transport, and it cannot be
-avoided: an alias is a model entry on the `model-router` provider, so something
-has to say which endpoint it forwards to. The alternative — one router provider
-per upstream — would force agents to repoint their model reference every time
-routing crossed providers, which is the one thing this plugin exists to prevent.
-
-An alias is therefore built only for a provider with a reachable endpoint: a
-`baseURL` in its config `options`, or the built-in `opencode` provider whose
-endpoint the router already knows. A provider with no reachable endpoint is
-skipped and logged rather than published as an alias that would fail on first
-use.
-
-A provider authenticated through `opencode auth login` needs one more thing. An
-alias carries a `baseURL` and a `body.model` but no `integrationID` — that field
-exists on `Provider.Info` and not on `Model.Info` — so OpenCode has nothing to
-resolve an auth header from, and the alias is refused with a 401 on first use.
-Setting `credentials: true` opts into reading the key out of OpenCode's own
-credential store and putting it on the alias:
-
-```json
-{ "package": "…opencode-agent-router…", "options": { "credentials": true } }
-```
-
-It is off by default because that store has no read API — `server.credential`
-ships only `credential.update` — so the key is read straight out of
-`opencode.db`, coupling the plugin to a private schema. Only `{ type: "key" }`
-credentials are used: an OAuth credential holds an access token that expires, and
-a frozen copy on a long-lived alias would die silently at expiry. Keys are held
-in a map that is never spread into a provider or model record, are resolved once
-per refresh so a mid-session `auth login` is picked up, and only a fingerprint is
-ever logged. Anything unresolvable means the provider is not aliased — never an
-alias that fails on first use.
+This is also why a probe passing is not proof an agent will run: the probe
+authenticates as the real provider, whereas the routed agent now does too, so the
+two agree by construction. An earlier design published alias models on a
+`model-router` provider instead, and an alias could carry an endpoint without a
+credential — `integrationID` exists on `Provider.Info` but not on `Model.Info` —
+so such an alias was refused with a 401 on first use. Pointing an agent at a real
+model removes that gap instead of papering over it.
 
 ## How it works
 

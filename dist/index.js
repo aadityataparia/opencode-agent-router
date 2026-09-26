@@ -1,26 +1,29 @@
 import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
-import { resolveCredential } from "./credentials";
 import { countMatches, findModel, formatStatus, HELP_TEXT, modelRef, parseCommand, ROUTER_COMMAND, } from "./commands";
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
 import { findCandidates } from "./scorer";
 import { Router } from "./router";
-import { AGENT_NAMES } from "./types";
+import { AGENT_NAMES, routerAgentID, } from "./types";
 import { Model, Plugin, Provider } from "@opencode/plugin";
 /**
- * The router exposes one alias model per managed agent (for example,
- * `model-router/orchestrator`) through a virtual provider. Each alias carries
- * a request-body override (`body.model` -> the selected real model), so
- * traffic to the alias is forwarded through OpenCode's compatible endpoint.
+ * The router owns one agent per managed role, named `model-router/<agent>`,
+ * and keeps that agent's `model` pointed at whichever real model wins routing
+ * this pass. A caller dispatches the role by that id and is routed for it, and
+ * because the agent names a real model, OpenCode resolves the endpoint and the
+ * credential itself — the router never has to stand in for a provider.
  *
- * Agents are never modified: callers can point an agent at
- * `model-router/<agent>` and get automatic, health-aware re-routing.
+ * Two consequences worth knowing before editing this:
+ *
+ *   - `AgentEditor` can only update agents that already exist (`update`, no
+ *     `add`), so every `model-router/<agent>` id must be declared in config or
+ *     by a preset. One that is not declared simply never gets a model.
+ *   - A model configured on the agent takes precedence over this transform, so
+ *     the ids are declared without one. Setting one pins the role by hand and
+ *     opts it out of routing.
  */
-const ROUTER_PROVIDER = "model-router";
-const ROUTER_PROVIDER_NAME = "Model Router";
-const ALIAS_VARIANTS = ["low", "medium", "high", "xhigh"];
 /** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
 const PROBE_CONCURRENCY = 6;
 /** Re-probe a model only after this many multiples of the refresh interval. */
@@ -40,15 +43,6 @@ export const OpenCodeAgentRouter = Plugin.define({
         const router = new Router(health);
         let timer;
         let refreshing = false;
-        let routerModels = [];
-        // Resolved API keys, keyed by provider id. Deliberately separate from
-        // `providerTransport`: that map is a snapshot of provider records that gets
-        // read by anything inspecting the plugin, and a secret does not belong in
-        // an object graph that wide. Rebuilt each refresh; see `refreshCredentials`.
-        const credentialKeys = new Map();
-        // IDs published by the last successful refresh. Keep this separate from
-        // the next inventory so a failed reload can still remove the old aliases.
-        let ownedAliasIds = new Set();
         // Snapshot for the `/router` command. Held in setup scope rather than inside
         // a refresh pass so the command can report what is actually published.
         let catalog = [];
@@ -59,123 +53,36 @@ export const OpenCodeAgentRouter = Plugin.define({
         /** Agent -> model ref, forced by `/router pin`. Session-only by design. */
         const pins = new Map();
         /**
-         * Transport details of every provider, refreshed on each transform pass.
-         *
-         * An alias carries the endpoint it forwards to, so the router can front any
-         * provider rather than only the one whose gateway it was built against.
-         * Reading this inside the transform is what keeps it fresh: the editor is the
-         * only place that sees providers other plugins have contributed.
+         * One agent transform for the lifetime of the plugin. It reads mutable state
+         * so a periodic refresh does not stack registrations, and the editor only
+         * ever sees the assignments from the last completed pass.
          */
-        const providerTransport = new Map();
-        /**
-         * Keep one provider transform registered for the lifetime of the plugin.
-         * The transform reads mutable state so periodic refreshes do not stack
-         * registrations or retain stale aliases.
-         */
-        const providerRegistration = await ctx.provider.transform((editor) => {
-            const providerID = Provider.ID.make(ROUTER_PROVIDER);
-            const existing = editor.get(ROUTER_PROVIDER);
-            // Snapshot before mutating, so the router's own entry never becomes the
-            // source of truth for what a target provider looks like.
-            providerTransport.clear();
-            for (const record of editor.list()) {
-                if (record.provider.id === ROUTER_PROVIDER)
-                    continue;
-                providerTransport.set(record.provider.id, {
-                    ...record.provider,
-                    settings: { ...record.provider.settings },
-                    headers: { ...record.provider.headers },
-                });
-            }
-            if (existing) {
-                editor.update(ROUTER_PROVIDER, (provider) => {
-                    provider.name = ROUTER_PROVIDER_NAME;
-                    provider.activation = "enabled";
-                });
-                // Preserve models owned by other transforms/plugins; replace only the
-                // aliases this plugin owns.
-                const kept = [...existing.models.values()].filter((model) => !ownedAliasIds.has(model.id));
-                editor.models.set(ROUTER_PROVIDER, [...kept, ...routerModels]);
-                return;
-            }
-            editor.add({
-                info: {
-                    ...Provider.Info.empty(providerID),
-                    name: ROUTER_PROVIDER_NAME,
-                    activation: "enabled",
-                },
-                models: routerModels,
-            });
-        });
-        function transportFor(providerID) {
-            const source = providerTransport.get(providerID);
-            const settings = { ...source?.settings };
-            // With no base URL there is nothing to forward to. Guessing a provider's
-            // default endpoint would publish aliases that only fail on first use.
-            if (typeof settings.baseURL !== "string")
-                return undefined;
-            // A provider's own `Authorization` never travels with the alias: it is
-            // scoped to whatever the provider was configured for, which is not
-            // necessarily the endpoint being forwarded to. When a key is resolvable
-            // below, the correct one takes its place.
-            const headers = {};
-            for (const [name, value] of Object.entries(source?.headers ?? {})) {
-                if (name.toLowerCase() === "authorization")
-                    continue;
-                headers[name] = value;
-            }
-            // A provider behind a credential cannot be reached through an alias
-            // unless the key comes with it: `Provider.Info` carries an
-            // `integrationID` but `Model.Info` does not, so OpenCode has nothing to
-            // resolve an auth header from for a model a plugin published. Publishing
-            // anyway yields an alias that 401s on its first real use — worse than not
-            // publishing, because the agent loses the model it was working on.
-            if (source?.integrationID) {
-                const credential = credentialKeys.get(providerID);
-                if (!credential)
-                    return undefined;
-                headers.Authorization = credential.authorization;
-            }
-            // Transport subset only. Never hand back the whole provider record: it
-            // gets spread into the alias model, and provider-level fields (`id`,
-            // `name`, `models`, `variants`) would clobber the alias's own identity
-            // and get rejected by the model schema, taking the whole catalog down.
-            return { package: source?.package, settings, headers };
-        }
-        /**
-         * Resolve an API key for every credentialed provider, once per refresh.
-         *
-         * Per refresh rather than once at startup, so `opencode auth login` during
-         * a session is picked up. Secrets live only in this map: it is never spread
-         * into a provider record, a model, or anything handed to `ctx.*`, and only
-         * the fingerprint is ever logged.
-         */
-        async function refreshCredentials() {
-            credentialKeys.clear();
-            if (!config.credentials)
-                return;
-            for (const [providerID, record] of providerTransport) {
-                const integrationID = record.integrationID;
-                if (!integrationID)
-                    continue;
-                const credential = await resolveCredential(integrationID);
-                if (credential) {
-                    credentialKeys.set(providerID, credential);
-                    log(config.log, `credential resolved for ${providerID} via ${integrationID} (key ${credential.fingerprint})`);
+        const agentRegistration = await ctx.agent.transform((editor) => {
+            for (const [agentName, model] of currentAssignments) {
+                const id = routerAgentID(agentName);
+                // `update` mutates an agent that already exists, and the editor has no
+                // `add`. An id nobody declared is skipped rather than invented.
+                if (!editor.get(id)) {
+                    log(config.log, `${id} is not a declared agent; no model assigned`);
                     continue;
                 }
-                log(config.log, `no usable API key for ${providerID} via ${integrationID}; it will not be aliased`);
+                editor.update(id, (agent) => {
+                    // `providerID` and `id` are separate fields on an agent's model, not
+                    // one `provider/model` string. This is the whole point of the design:
+                    // the agent names a real model, so OpenCode resolves that provider's
+                    // endpoint and credential without the router standing in for it.
+                    agent.model = {
+                        providerID: Provider.ID.make(model.providerID),
+                        id: Model.ID.make(model.modelID ?? model.id),
+                    };
+                });
             }
-        }
+        });
         async function discover() {
             const catalog = await ctx.model.list();
-            // Exclude our own aliases from the candidate pool so routing never
-            // self-references (for example, model-router/orchestrator).
-            const models = catalog.data
-                .filter((model) => model.providerID !== ROUTER_PROVIDER ||
-                !ownedAliasIds.has(model.id))
-                .map(classifyModel);
-            return health.merge(models);
+            // No self-exclusion is needed here: the router publishes no models of its
+            // own, so there is no alias for routing to land back on.
+            return health.merge(catalog.data.map(classifyModel));
         }
         /**
          * Providers currently believed to be rejecting credentials, and the notice
@@ -391,41 +298,6 @@ export const OpenCodeAgentRouter = Plugin.define({
             }
             return assignments;
         }
-        function buildAliases(assignments) {
-            const providerID = Provider.ID.make(ROUTER_PROVIDER);
-            const aliases = [];
-            for (const [agentName, target] of assignments) {
-                const transport = transportFor(target.providerID);
-                if (!transport) {
-                    log(config.log, `${agentName}: no known endpoint for provider ${target.providerID}; no alias created`);
-                    continue;
-                }
-                const targetID = target.modelID ?? target.id;
-                aliases.push({
-                    ...Model.Info.default(providerID, Model.ID.make(agentName)),
-                    name: `${agentName} (routed)`,
-                    package: transport.package,
-                    settings: { ...transport.settings },
-                    body: { model: targetID },
-                    headers: transport.headers,
-                    variants: ALIAS_VARIANTS.map((id) => ({
-                        id: Model.VariantID.make(id),
-                    })),
-                });
-            }
-            return aliases;
-        }
-        async function syncRouterModels(assignments) {
-            const nextAliases = buildAliases(assignments);
-            const nextAliasIds = new Set(nextAliases.map((model) => model.id));
-            // Update the state before reload. The single provider transform will be
-            // replayed against the new alias inventory. Keep the previous ownership
-            // set until the reload succeeds so a failed refresh can still clean up
-            // the aliases that were actually published.
-            routerModels = nextAliases;
-            await ctx.provider.reload();
-            ownedAliasIds = nextAliasIds;
-        }
         let lastAssignments = "";
         async function applyRouting(reason, opts = {}) {
             if (refreshing)
@@ -454,13 +326,12 @@ export const OpenCodeAgentRouter = Plugin.define({
                     log(config.log, "no routing changes; skipping provider refresh");
                     return { status: "unchanged", assignments: assignments.size };
                 }
-                // Before the alias set is rebuilt: `transportFor` reads the key map to
-                // decide whether a credentialed provider can be aliased at all.
-                await refreshCredentials();
-                await syncRouterModels(assignments);
+                // The agent transform reads `currentAssignments`; reloading replays it
+                // so the models chosen by this pass take effect.
+                await ctx.agent.reload();
                 lastAssignments = signature;
                 for (const [agent, model] of assignments) {
-                    log(config.log, `${agent} => ${ROUTER_PROVIDER}/${agent} -> ${model.providerID}/${model.modelID ?? model.id}`);
+                    log(config.log, `${routerAgentID(agent)} -> ${model.providerID}/${model.modelID ?? model.id}`);
                 }
                 return { status: "changed", assignments: assignments.size };
             }
@@ -556,19 +427,14 @@ ${text}
                             : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
                         return;
                     }
-                    // An alias can only forward somewhere it knows how to reach.
-                    // Pinning a provider with no known endpoint would silently delete
-                    // that agent's alias, which looks like the pin "broke" the agent
-                    // rather than being refused.
-                    if (!transportFor(target.providerID)) {
-                        await say(`\`${modelRef(target)}\` is on the \`${target.providerID}\` provider, which has no known endpoint in the config, so an alias cannot forward to it. Pin refused.`);
-                        return;
-                    }
+                    // No reachability check is needed: the agent names a real model, so
+                    // OpenCode resolves that provider's endpoint and credential. A model
+                    // the router can list is a model the agent can run on.
                     pins.set(parsed.agent, modelRef(target));
                     const outcome = await applyRouting("pin");
                     await say(outcome.status === "failed"
                         ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\` (alias \`${ROUTER_PROVIDER}/${parsed.agent}\`). Session-only; \`/router unpin\` to undo.`);
+                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\` (agent \`${routerAgentID(parsed.agent)}\`). Session-only; \`/router unpin\` to undo.`);
                     return;
                 }
                 case "unpin": {
@@ -626,7 +492,7 @@ ${text}
             if (timer)
                 clearInterval(timer);
             await commandRegistration.dispose();
-            await providerRegistration.dispose();
+            await agentRegistration.dispose();
         };
     },
 });

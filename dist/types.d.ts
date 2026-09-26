@@ -1,4 +1,13 @@
 import type { PresetName } from "./presets";
+/**
+ * Agent id prefix the router owns. Each managed role gets an agent named
+ * `model-router/<agent>` whose `model` the router keeps pointed at whichever
+ * real model currently wins routing, so a caller dispatches a role by a stable
+ * id no matter which provider that winner sits on.
+ */
+export declare const ROUTER_AGENT_PREFIX = "model-router/";
+/** The router-owned agent id for a managed role. */
+export declare function routerAgentID(agent: string): string;
 declare const OMO_AGENT_NAMES: readonly ["sisyphus", "hephaestus", "prometheus", "atlas", "oracle", "librarian", "explore", "multimodal-looker", "metis", "momus", "sisyphus-junior"];
 type OMOAgentName = (typeof OMO_AGENT_NAMES)[number];
 declare const SLIM_AGENT_NAMES: readonly ["orchestrator", "explorer", "oracle", "council", "councillor", "librarian", "designer", "fixer", "observer"];
@@ -69,12 +78,6 @@ export interface RouterConfig {
     maxFallbacks: number;
     probe: boolean;
     probeTimeoutMs: number;
-    /**
-     * Whether the router may resolve a provider's stored API key so an alias can
-     * authenticate to it. Off by default; see `src/credentials.ts` for why this
-     * is opt-in and what it refuses to do.
-     */
-    credentials: boolean;
     strategy: RoutingStrategy;
     minHealth: number;
     log: boolean;

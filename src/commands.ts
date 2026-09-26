@@ -148,7 +148,7 @@ export function countMatches(
 
 export interface StatusView {
   config: RouterConfig;
-  /** Agent -> chosen model for the aliases currently published. */
+  /** Agent -> chosen model for the routed agents currently published. */
   assignments: ReadonlyMap<string, DiscoveredModel>;
   /** Agent -> pinned model ref. */
   pins: ReadonlyMap<string, string>;
