@@ -138,7 +138,10 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     });
 
     const timer = setInterval(() => {
-      if (readRoutes(ctx, ctx.location ?? ctx.data.location.default()).length === 0) {
+      if (
+        readRoutes(ctx, ctx.location ?? ctx.data.location.default()).length ===
+        0
+      ) {
         resyncAgents();
       }
       const next = stateSignature(ctx);
@@ -295,15 +298,26 @@ function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
   const agents = ctx.data.location.agent.list(location) ?? [];
   const routes: Route[] = [];
 
+  const total = agents.length;
+  let withModel = 0;
+  let prefixed = 0;
   for (const agent of agents) {
     if (!agent.id.startsWith(ROUTER_AGENT_PREFIX)) continue;
+    prefixed += 1;
     const model = agent.model;
-    if (!model) continue;
+    if (model) withModel += 1;
     routes.push({
       agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-      target: `${model.providerID}/${model.id}`,
+      target: model ? `${model.providerID}/${model.id}` : "-",
     });
   }
+
+  trace(
+    `readRoutes total=${total} prefixed=${prefixed} withModel=${withModel} ids=${agents
+      .slice(0, 12)
+      .map((a) => a.id)
+      .join("|")}`,
+  );
 
   return routes.sort((a, b) => a.agent.localeCompare(b.agent));
 }

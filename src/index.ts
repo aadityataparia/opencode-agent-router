@@ -89,10 +89,7 @@ export const OpenCodeAgentRouter = Plugin.define({
           config.log,
           `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`,
         );
-        log(
-          config.log,
-          "restart OpenCode to discover the new agent files",
-        );
+        log(config.log, "restart OpenCode to discover the new agent files");
       }
       if (agentSync.removed.length > 0) {
         log(
