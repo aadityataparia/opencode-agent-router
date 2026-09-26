@@ -182,9 +182,9 @@ function header(
       alignItems: "center",
     },
     [
-      box({ paddingLeft: 1, paddingRight: 1, backgroundColor: theme.accent }, [
+      box({ paddingRight: 1, backgroundColor: theme.accent }, [
         text({ fg: theme.background }, [
-          `${expanded ? "▾" : "▸"} Model Router (${count})`,
+          `${expanded ? "▼" : "▶"} Model Router (${count})`,
         ]),
       ]),
       text({ fg: theme.textMuted, wrapMode: "none" }, [`v${version}`]),
