@@ -27,25 +27,23 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         let expanded = false;
         let disposed = false;
         let disposeSlot;
-        // The agent list is cached, and the routed agents may not exist yet.
-        const AGENT_RESYNC_MS = 5_000;
-        let lastResync = 0;
-        const resyncAgents = (force = false) => {
-            const now = Date.now();
-            if (!force && now - lastResync < AGENT_RESYNC_MS)
-                return;
-            lastResync = now;
+        // The agent list is fetched over `ctx.client` rather than read from
+        // `ctx.data.location.agent`: that collection is scoped to a location and does
+        // not carry the routed agents, so the panel saw none. `agent.list()` is where
+        // the transform's assignment lands, so it is the authoritative answer.
+        let routes = [];
+        const refreshRoutes = async () => {
             try {
-                ctx.data.location.agent.invalidate();
-                void ctx.data.location.agent.sync();
+                const directory = ctx.location?.directory;
+                const result = await ctx.client.agent.list(directory ? { location: { directory } } : {});
+                routes = toRoutes(result.data ?? []);
             }
             catch (error) {
-                trace(`agent resync failed ${String(error)}`);
+                trace(`agent.list failed ${String(error)}`);
             }
         };
         const build = () => {
             const location = ctx.location ?? ctx.data.location.default();
-            const routes = readRoutes(ctx, location);
             const selected = readSelection(ctx, location);
             // The selection is a real model, so the current route is whichever routed
             // agent currently points at it — not an agent whose id matches it.
@@ -99,25 +97,26 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         let signature = "";
         const unsubscribe = ctx.data.on("session.model.selected", (event) => {
             trace(`model.selected ${event.data.model.providerID}/${event.data.model.id}`);
-            rebuild();
-            // Re-seed so the poll does not rebuild the same tree again.
-            signature = stateSignature(ctx);
+            void refreshRoutes().then(() => {
+                rebuild();
+                // Re-seed so the poll does not rebuild the same tree again.
+                signature = stateSignature(ctx, routes);
+            });
         });
         const timer = setInterval(() => {
-            if (readRoutes(ctx, ctx.location ?? ctx.data.location.default()).length ===
-                0) {
-                resyncAgents();
-            }
-            const next = stateSignature(ctx);
-            if (next === signature)
-                return;
-            signature = next;
-            trace(`change ${next}`);
-            rebuild();
+            void refreshRoutes().then(() => {
+                const next = stateSignature(ctx, routes);
+                if (next === signature)
+                    return;
+                signature = next;
+                trace(`change ${next}`);
+                rebuild();
+            });
         }, REFRESH_MS);
-        claim();
-        resyncAgents(true);
-        signature = stateSignature(ctx);
+        void refreshRoutes().then(() => {
+            claim();
+            signature = stateSignature(ctx, routes);
+        });
         return () => {
             disposed = true;
             clearInterval(timer);
@@ -214,28 +213,19 @@ function interactive(node, onActivate) {
 }
 /* -------------------------------------------------------------------- state */
 /** Live routes, read from the agents the server maintains. An agent with no model is not a route yet. */
-function readRoutes(ctx, location) {
-    const agents = ctx.data.location.agent.list(location) ?? [];
+function toRoutes(agents) {
     const routes = [];
-    const total = agents.length;
-    let withModel = 0;
-    let prefixed = 0;
     for (const agent of agents) {
         if (!agent.id.startsWith(ROUTER_AGENT_PREFIX))
             continue;
-        prefixed += 1;
         const model = agent.model;
-        if (model)
-            withModel += 1;
+        if (!model)
+            continue;
         routes.push({
             agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-            target: model ? `${model.providerID}/${model.id}` : "-",
+            target: `${model.providerID}/${model.id}`,
         });
     }
-    trace(`readRoutes total=${total} prefixed=${prefixed} withModel=${withModel} ids=${agents
-        .slice(0, 12)
-        .map((a) => a.id)
-        .join("|")}`);
     return routes.sort((a, b) => a.agent.localeCompare(b.agent));
 }
 /** The model in use now: from the session record, or the primary agent's model off a session. */
@@ -254,10 +244,10 @@ function readSelection(ctx, location) {
     return { providerID: primary.model.providerID, id: primary.model.id };
 }
 /** Change detector for the poll loop, from the same reads `build` performs. */
-function stateSignature(ctx) {
+function stateSignature(ctx, routes) {
     const location = ctx.location ?? ctx.data.location.default();
     const selected = readSelection(ctx, location);
-    const routes = readRoutes(ctx, location)
+    const assigned = routes
         .map((route) => `${route.agent}=${route.target}`)
         .join(",");
     const selection = [
@@ -265,7 +255,7 @@ function stateSignature(ctx) {
         selected?.id ?? "",
         selected?.variant ?? "",
     ].join("/");
-    return `${selection}#${routes}`;
+    return `${selection}#${assigned}`;
 }
 function readVersion() {
     try {

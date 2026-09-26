@@ -35,7 +35,8 @@ function classify(status, detail) {
     // Throttling is transient and says nothing about the model.
     if (status === 429)
         return "inconclusive";
-    if (/\b(429)\b/.test(detail) || /rate.?limit|too many requests|quota exceeded/i.test(detail)) {
+    if (/\b(429)\b/.test(detail) ||
+        /rate.?limit|too many requests|quota exceeded/i.test(detail)) {
         return "inconclusive";
     }
     // Not the model's fault, but it cannot serve traffic until the provider is back.

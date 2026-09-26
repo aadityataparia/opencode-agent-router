@@ -46,24 +46,25 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     let disposed = false;
     let disposeSlot: (() => void) | undefined;
 
-    // The agent list is cached, and the routed agents may not exist yet.
-    const AGENT_RESYNC_MS = 5_000;
-    let lastResync = 0;
-    const resyncAgents = (force = false): void => {
-      const now = Date.now();
-      if (!force && now - lastResync < AGENT_RESYNC_MS) return;
-      lastResync = now;
+    // The agent list is fetched over `ctx.client` rather than read from
+    // `ctx.data.location.agent`: that collection is scoped to a location and does
+    // not carry the routed agents, so the panel saw none. `agent.list()` is where
+    // the transform's assignment lands, so it is the authoritative answer.
+    let routes: Route[] = [];
+    const refreshRoutes = async (): Promise<void> => {
       try {
-        ctx.data.location.agent.invalidate();
-        void ctx.data.location.agent.sync();
+        const directory = ctx.location?.directory;
+        const result = await ctx.client.agent.list(
+          directory ? { location: { directory } } : {},
+        );
+        routes = toRoutes(result.data ?? []);
       } catch (error) {
-        trace(`agent resync failed ${String(error)}`);
+        trace(`agent.list failed ${String(error)}`);
       }
     };
 
     const build = (): Element => {
       const location = ctx.location ?? ctx.data.location.default();
-      const routes = readRoutes(ctx, location);
       const selected = readSelection(ctx, location);
       // The selection is a real model, so the current route is whichever routed
       // agent currently points at it — not an agent whose id matches it.
@@ -132,28 +133,27 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       trace(
         `model.selected ${event.data.model.providerID}/${event.data.model.id}`,
       );
-      rebuild();
-      // Re-seed so the poll does not rebuild the same tree again.
-      signature = stateSignature(ctx);
+      void refreshRoutes().then(() => {
+        rebuild();
+        // Re-seed so the poll does not rebuild the same tree again.
+        signature = stateSignature(ctx, routes);
+      });
     });
 
     const timer = setInterval(() => {
-      if (
-        readRoutes(ctx, ctx.location ?? ctx.data.location.default()).length ===
-        0
-      ) {
-        resyncAgents();
-      }
-      const next = stateSignature(ctx);
-      if (next === signature) return;
-      signature = next;
-      trace(`change ${next}`);
-      rebuild();
+      void refreshRoutes().then(() => {
+        const next = stateSignature(ctx, routes);
+        if (next === signature) return;
+        signature = next;
+        trace(`change ${next}`);
+        rebuild();
+      });
     }, REFRESH_MS);
 
-    claim();
-    resyncAgents(true);
-    signature = stateSignature(ctx);
+    void refreshRoutes().then(() => {
+      claim();
+      signature = stateSignature(ctx, routes);
+    });
 
     return () => {
       disposed = true;
@@ -294,31 +294,19 @@ function interactive(node: Element, onActivate: () => void): Element {
 /* -------------------------------------------------------------------- state */
 
 /** Live routes, read from the agents the server maintains. An agent with no model is not a route yet. */
-function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
-  const agents = ctx.data.location.agent.list(location) ?? [];
+function toRoutes(
+  agents: readonly { id: string; model?: { providerID: string; id: string } }[],
+): Route[] {
   const routes: Route[] = [];
-
-  const total = agents.length;
-  let withModel = 0;
-  let prefixed = 0;
   for (const agent of agents) {
     if (!agent.id.startsWith(ROUTER_AGENT_PREFIX)) continue;
-    prefixed += 1;
     const model = agent.model;
-    if (model) withModel += 1;
+    if (!model) continue;
     routes.push({
       agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-      target: model ? `${model.providerID}/${model.id}` : "-",
+      target: `${model.providerID}/${model.id}`,
     });
   }
-
-  trace(
-    `readRoutes total=${total} prefixed=${prefixed} withModel=${withModel} ids=${agents
-      .slice(0, 12)
-      .map((a) => a.id)
-      .join("|")}`,
-  );
-
   return routes.sort((a, b) => a.agent.localeCompare(b.agent));
 }
 
@@ -342,10 +330,10 @@ function readSelection(
 }
 
 /** Change detector for the poll loop, from the same reads `build` performs. */
-function stateSignature(ctx: TuiContext): string {
+function stateSignature(ctx: TuiContext, routes: readonly Route[]): string {
   const location = ctx.location ?? ctx.data.location.default();
   const selected = readSelection(ctx, location);
-  const routes = readRoutes(ctx, location)
+  const assigned = routes
     .map((route) => `${route.agent}=${route.target}`)
     .join(",");
   const selection = [
@@ -353,7 +341,7 @@ function stateSignature(ctx: TuiContext): string {
     selected?.id ?? "",
     selected?.variant ?? "",
   ].join("/");
-  return `${selection}#${routes}`;
+  return `${selection}#${assigned}`;
 }
 
 function readVersion(): string {

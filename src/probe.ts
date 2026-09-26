@@ -47,7 +47,8 @@ function errorStatus(error: unknown): number | undefined {
   for (const key of ["status", "statusCode", "code"]) {
     const value = record[key];
     if (typeof value === "number" && value >= 100 && value < 600) return value;
-    if (typeof value === "string" && /^\d{3}$/.test(value)) return Number(value);
+    if (typeof value === "string" && /^\d{3}$/.test(value))
+      return Number(value);
   }
   return undefined;
 }
@@ -71,7 +72,10 @@ function describe(error: unknown): string {
 function classify(status: number | undefined, detail: string): ProbeVerdict {
   // Throttling is transient and says nothing about the model.
   if (status === 429) return "inconclusive";
-  if (/\b(429)\b/.test(detail) || /rate.?limit|too many requests|quota exceeded/i.test(detail)) {
+  if (
+    /\b(429)\b/.test(detail) ||
+    /rate.?limit|too many requests|quota exceeded/i.test(detail)
+  ) {
     return "inconclusive";
   }
 
