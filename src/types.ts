@@ -1,3 +1,5 @@
+import type { PresetName } from "./presets";
+
 const OMO_AGENT_NAMES = [
   "sisyphus",
   "hephaestus",
@@ -17,9 +19,10 @@ type OMOAgentName = (typeof OMO_AGENT_NAMES)[number];
 const SLIM_AGENT_NAMES = [
   "orchestrator",
   "explorer",
-  // "oracle",
+  "oracle",
   "council",
-  // "librarian",
+  "councillor",
+  "librarian",
   "designer",
   "fixer",
   "observer",
@@ -124,4 +127,9 @@ export interface RouterConfig {
   strategy: RoutingStrategy;
   minHealth: number;
   log: boolean;
+  /**
+   * Agent presets to route for. Empty means "use the installed plugins", which
+   * is resolved once at startup.
+   */
+  presets: PresetName[];
 }

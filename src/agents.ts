@@ -146,6 +146,28 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     costWeight: 0,
     contextWeight: 0.15,
   },
+  councillor: {
+    // An individual member of a council. Council synthesizes the consensus, so
+    // a councillor's job is to reason well and dissent usefully: it wants depth
+    // and long context, but unlike the council it should not be the most
+    // expensive model available.
+    categories: ["reasoning", "long-context", "coding"],
+
+    weights: {
+      reasoning: 1.0,
+      "long-context": 0.85,
+      coding: 0.6,
+    },
+
+    minContext: 100000,
+    reasoning: true,
+    tools: true,
+
+    healthWeight: 0.25,
+    latencyWeight: 0.1,
+    costWeight: 0.1,
+    contextWeight: 0.15,
+  },
   "sisyphus-junior": {
     categories: ["coding", "fast", "cheap", "general"],
     weights: { coding: 0.8, fast: 1.0, cheap: 1.0, general: 0.4 },

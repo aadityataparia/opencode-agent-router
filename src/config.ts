@@ -1,3 +1,4 @@
+import { detectPresets, isPresetName, type PresetName } from "./presets";
 import type { RouterConfig, RoutingStrategy } from "./types";
 
 function numberEnv(name: string, fallback: number): number {
@@ -11,6 +12,36 @@ function boolEnv(name: string, fallback: boolean): boolean {
   return ["1", "true", "yes", "on"].includes(value.toLowerCase());
 }
 
+/**
+ * Read the preset list from `OCO_ROUTER_PRESETS` (comma-separated).
+ *
+ * Returns `undefined` when the variable is unset *or* empty, which is what
+ * selects auto-detection. An empty value is treated as unset on purpose: a
+ * variable exported as `OCO_ROUTER_PRESETS=` means "no preference", and silently
+ * routing for zero agents would look like the router had broken.
+ */
+function presetsEnv(): PresetName[] | undefined {
+  const raw = process.env.OCO_ROUTER_PRESETS;
+  if (raw === undefined) return undefined;
+
+  const requested = raw
+    .split(",")
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+
+  if (requested.length === 0) return undefined;
+
+  const known = requested.filter(isPresetName);
+  const unknown = requested.filter((value) => !isPresetName(value));
+  if (unknown.length > 0) {
+    console.error(
+      `[opencode-agent-router] ignoring unknown preset(s) in OCO_ROUTER_PRESETS: ${unknown.join(", ")}`,
+    );
+  }
+
+  return known;
+}
+
 const strategies: Set<RoutingStrategy> = new Set([
   "priority",
   "round-robin",
@@ -20,11 +51,21 @@ const strategies: Set<RoutingStrategy> = new Set([
   "adaptive",
 ]);
 
-export function loadConfig(): RouterConfig {
+export function loadConfig(log = false): RouterConfig {
   const raw = process.env.OCO_ROUTER_STRATEGY ?? "adaptive";
   const strategy = strategies.has(raw as RoutingStrategy)
     ? (raw as RoutingStrategy)
     : "adaptive";
+
+  const configured = presetsEnv();
+  const presets = configured ?? detectPresets();
+
+  if (log) {
+    const source = configured ? "OCO_ROUTER_PRESETS" : "detected from config";
+    console.error(
+      `[opencode-agent-router] routing for preset(s): ${presets.join(", ") || "(none)"} (${source})`,
+    );
+  }
 
   return {
     refreshMs: numberEnv("OCO_ROUTER_REFRESH_MS", 60_000),
@@ -39,6 +80,7 @@ export function loadConfig(): RouterConfig {
       1,
       Math.max(0, Number(process.env.OCO_ROUTER_MIN_HEALTH ?? 0.2)),
     ),
-    log: boolEnv("OCO_ROUTER_LOG", false),
+    log: log || boolEnv("OCO_ROUTER_LOG", false),
+    presets,
   };
 }

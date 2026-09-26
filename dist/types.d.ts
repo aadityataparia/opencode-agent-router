@@ -1,10 +1,11 @@
+import type { PresetName } from "./presets";
 declare const OMO_AGENT_NAMES: readonly ["sisyphus", "hephaestus", "prometheus", "atlas", "oracle", "librarian", "explore", "multimodal-looker", "metis", "momus", "sisyphus-junior"];
 type OMOAgentName = (typeof OMO_AGENT_NAMES)[number];
-declare const SLIM_AGENT_NAMES: readonly ["orchestrator", "explorer", "council", "designer", "fixer", "observer"];
+declare const SLIM_AGENT_NAMES: readonly ["orchestrator", "explorer", "oracle", "council", "councillor", "librarian", "designer", "fixer", "observer"];
 type SlimAgentName = (typeof SLIM_AGENT_NAMES)[number];
 declare const BASIC_AGENTS: readonly ["coder", "architect", "visual"];
 type BasicAgentName = (typeof BASIC_AGENTS)[number];
-export declare const AGENT_NAMES: readonly ["sisyphus", "hephaestus", "prometheus", "atlas", "oracle", "librarian", "explore", "multimodal-looker", "metis", "momus", "sisyphus-junior", "orchestrator", "explorer", "council", "designer", "fixer", "observer", "coder", "architect", "visual"];
+export declare const AGENT_NAMES: readonly ["sisyphus", "hephaestus", "prometheus", "atlas", "oracle", "librarian", "explore", "multimodal-looker", "metis", "momus", "sisyphus-junior", "orchestrator", "explorer", "oracle", "council", "councillor", "librarian", "designer", "fixer", "observer", "coder", "architect", "visual"];
 export type AgentName = OMOAgentName | SlimAgentName | BasicAgentName;
 export type ModelCategory = "reasoning" | "coding" | "fast" | "vision" | "long-context" | "cheap" | "general";
 export type RoutingStrategy = "priority" | "round-robin" | "weighted" | "latency" | "rate" | "adaptive";
@@ -71,5 +72,10 @@ export interface RouterConfig {
     strategy: RoutingStrategy;
     minHealth: number;
     log: boolean;
+    /**
+     * Agent presets to route for. Empty means "use the installed plugins", which
+     * is resolved once at startup.
+     */
+    presets: PresetName[];
 }
 export {};

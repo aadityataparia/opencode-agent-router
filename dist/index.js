@@ -2,6 +2,7 @@ import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
+import { presetAgentNames } from "./presets";
 import { findCandidates } from "./scorer";
 import { Router } from "./router";
 import { AGENT_NAMES, } from "./types";
@@ -37,7 +38,9 @@ function log(enabled, ...args) {
 export const OpenCodeAgentRouter = Plugin.define({
     id: "opencode-agent-router",
     setup: async (ctx) => {
-        const config = loadConfig();
+        // Resolved before anything else so the preset decision is visible in the
+        // log at startup rather than on the first refresh.
+        const config = loadConfig(["1", "true", "yes", "on"].includes((process.env.OCO_ROUTER_LOG ?? "").toLowerCase()));
         const health = new HealthStore();
         const router = new Router(health);
         let timer;
@@ -213,10 +216,22 @@ export const OpenCodeAgentRouter = Plugin.define({
         async function computeAssignments(models) {
             const assignments = new Map();
             const userDefinedAgents = (ctx.options?.["agents"] ?? {});
-            for (const agentName of [
-                ...AGENT_NAMES,
+            // Only route agents the active presets actually define. Without this the
+            // router publishes aliases for every agent it has ever heard of, so a
+            // slim-only user also gets sisyphus/metis/prometheus aliases for agents
+            // that do not exist in their install.
+            const presetAgents = new Set(presetAgentNames(config.presets));
+            const routedAgents = [
+                ...AGENT_NAMES.filter((name) => presetAgents.has(name)),
+                // A user-defined agent is opted into by declaring it, so presets do not
+                // gate it.
                 ...Object.keys(userDefinedAgents),
-            ]) {
+            ].filter((name, index, all) => all.indexOf(name) === index);
+            const skipped = AGENT_NAMES.filter((name) => !presetAgents.has(name));
+            if (skipped.length > 0) {
+                log(config.log, `presets ${config.presets.join(", ") || "(none)"} exclude ${skipped.length} agent(s): ${skipped.join(", ")}`);
+            }
+            for (const agentName of routedAgents) {
                 const candidates = findCandidates(agentName, models, userDefinedAgents).filter(({ model }) => model.health >= config.minHealth);
                 if (candidates.length === 0) {
                     log(config.log, `no suitable model for ${agentName}; skipping`);

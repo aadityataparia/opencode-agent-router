@@ -14,9 +14,10 @@ const OMO_AGENT_NAMES = [
 const SLIM_AGENT_NAMES = [
     "orchestrator",
     "explorer",
-    // "oracle",
+    "oracle",
     "council",
-    // "librarian",
+    "councillor",
+    "librarian",
     "designer",
     "fixer",
     "observer",

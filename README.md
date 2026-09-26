@@ -36,6 +36,41 @@ presets.
 | `maxFallbacks` | Candidate fallbacks considered per agent (default `5`). |
 | `log` | Verbose logging (env `OCO_ROUTER_LOG=true` also enables it). |
 | `agents` | Extra agent definitions (requirement categories/weights). |
+| `presets` | Which orchestrator plugin's agents to route for (env `OCO_ROUTER_PRESETS`, comma-separated). Default: auto-detected from your OpenCode config. |
+
+## Agent presets
+
+The router publishes one alias per managed agent, so *which* agents it manages
+depends on which orchestrator plugin you actually run. Routing every agent the
+router has heard of would leave a slim-only user with `sisyphus` and `metis`
+aliases for agents that do not exist in their install.
+
+`presets` narrows routing to the agents a given plugin defines:
+
+| Preset | Agents |
+| --- | --- |
+| `oh-my-opencode` | atlas, explore, hephaestus, librarian, metis, momus, multimodal-looker, oracle, prometheus, sisyphus, sisyphus-junior |
+| `oh-my-openagent` | same 11 names as `oh-my-opencode` |
+| `oh-my-opencode-slim` | orchestrator, explorer, librarian, oracle, designer, fixer, observer, council, councillor |
+
+```bash
+# one preset
+OCO_ROUTER_PRESETS=oh-my-opencode-slim opencode
+
+# several at once
+OCO_ROUTER_PRESETS=oh-my-opencode,oh-my-opencode-slim opencode
+```
+
+Left unset, the router reads the `plugin` list from your OpenCode config and
+routes for the presets it finds there, so the common case needs no
+configuration. The config is the signal rather than the package cache on purpose:
+a package can sit in `~/.cache/opencode` long after you removed it from your
+config, and routing for a plugin you uninstalled is exactly what this avoids.
+If no config can be read at all, the router falls back to routing for every
+preset rather than silently routing for nothing.
+
+Agents you declare yourself under `agents` are always routed, since declaring
+one is an explicit opt-in that presets should not override.
 
 ## Probing
 
