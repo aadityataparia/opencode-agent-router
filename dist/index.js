@@ -173,8 +173,12 @@ export const OpenCodeAgentRouter = Plugin.define({
             }
         }
         function formatRoutes() {
+            // OpenCode starts a session turn after every command, so the report
+            // closes with an explicit instruction. Without it the agent treats the
+            // table as a task and spends a call restating it.
+            const noReply = "_Report only. Do not summarize, comment, or ask a question in reply._";
             if (!publishedRoutes || publishedRoutes.entries.length === 0) {
-                return `Model Router: no routes published yet. The router is still refreshing, or no candidate passed minHealth ${config.minHealth}.`;
+                return `Model Router: no routes published yet. The router is still refreshing, or no candidate passed minHealth ${config.minHealth}.\n\n${noReply}`;
             }
             const { entries, at } = publishedRoutes;
             const width = Math.max(...entries.map((entry) => entry.agent.length));
@@ -182,6 +186,8 @@ export const OpenCodeAgentRouter = Plugin.define({
             return [
                 `Model Router (${entries.length} agents, ${config.strategy}, updated ${age}s ago)`,
                 ...entries.map((entry) => `  ${entry.agent.padEnd(width)}  model-router/${entry.agent} -> ${entry.target}`),
+                "",
+                noReply,
             ].join("\n");
         }
         // Make the provider available before the first model discovery pass.
@@ -197,6 +203,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                     if (!publishedRoutes)
                         await applyRouting("command");
                     // A synthetic message displays the report without invoking a model.
+                    // Do not interrupt the turn OpenCode starts after a command: doing so
+                    // strands this message in the inbox instead of displaying it.
                     await ctx.session.synthetic({
                         sessionID,
                         text: formatRoutes(),

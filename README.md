@@ -78,10 +78,14 @@ Model Router (3 agents, adaptive, updated 12s ago)
   explorer      model-router/explorer -> opencode/grok-code-fast-1
   fixer         model-router/fixer -> opencode/claude-sonnet-4-5
   orchestrator  model-router/orchestrator -> opencode/gpt-5
+
+_Report only. Do not summarize, comment, or ask a question in reply._
 ```
 
 Agents with no routable candidate are left out of the report; the command prints a
-single explanatory line when nothing has been published yet.
+single explanatory line when nothing has been published yet. OpenCode starts a
+session turn after every command, so the report ends with an explicit no-reply
+instruction to keep that follow-up turn from restating the table.
 
 ## Compatibility
 
