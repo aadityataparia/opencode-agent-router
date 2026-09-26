@@ -106,7 +106,11 @@ export const OpenCodeAgentRouter = Plugin.define({
             // default endpoint would publish aliases that only fail on first use.
             if (typeof settings.baseURL !== "string")
                 return undefined;
-            return { ...source, settings };
+            // Transport subset only. Never hand back the whole provider record: it
+            // gets spread into the alias model, and provider-level fields (`id`,
+            // `name`, `models`, `variants`) would clobber the alias's own identity
+            // and get rejected by the model schema, taking the whole catalog down.
+            return { package: source?.package, settings };
         }
         async function discover() {
             const catalog = await ctx.model.list();
@@ -345,7 +349,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 aliases.push({
                     ...Model.Info.default(providerID, Model.ID.make(agentName)),
                     name: `${agentName} (routed)`,
-                    ...transport,
+                    package: transport.package,
+                    settings: { ...transport.settings },
                     body: { model: targetID },
                 });
             }
