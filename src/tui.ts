@@ -115,7 +115,20 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       ctx.renderer.requestRender();
     };
 
+    // Model selection is announced as an event, so react to it rather than
+    // making the panel wait out a poll interval to move the marker. The event
+    // is a nudge, not the state itself: the rebuild re-reads through
+    // `readSelection`, which resolves off-session the same way the poll does.
     let signature = "";
+    const unsubscribe = ctx.data.on("session.model.selected", (event) => {
+      trace(`model.selected ${event.data.model.providerID}/${event.data.model.id}`);
+      rebuild();
+      // Re-seed the signature so the poll does not rebuild the same tree again.
+      // If the event outran the data it announces, the value written here is
+      // the old one and the poll still catches the change on its next tick.
+      signature = stateSignature(ctx);
+    });
+
     const timer = setInterval(() => {
       const next = stateSignature(ctx);
       if (next === signature) return;
@@ -130,6 +143,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     return () => {
       disposed = true;
       clearInterval(timer);
+      unsubscribe();
       disposeSlot?.();
     };
   },
@@ -340,17 +354,28 @@ function readSelection(
   return { providerID: primary.model.providerID, id: primary.model.id };
 }
 
-/** Cheap change detector for the poll loop. */
+/**
+ * Cheap change detector for the poll loop.
+ *
+ * Derived from exactly the two reads `build` performs, so the panel cannot
+ * render from a value the loop is not watching. The selection goes through
+ * `readSelection` rather than the session record directly: off a session the
+ * panel falls back to the primary agent's configured model, and a signature
+ * that only looked at the session would never notice that switch. The variant
+ * is included because the current row renders it.
+ */
 function stateSignature(ctx: TuiContext): string {
-  const route = ctx.ui.router.current();
-  const session =
-    route.type === "session"
-      ? ctx.data.session.get(route.sessionID)
-      : undefined;
-  const routes = readRoutes(ctx, ctx.location ?? ctx.data.location.default())
+  const location = ctx.location ?? ctx.data.location.default();
+  const selected = readSelection(ctx, location);
+  const routes = readRoutes(ctx, location)
     .map((route) => `${route.agent}=${route.target}`)
     .join(",");
-  return `${session?.model?.providerID ?? ""}/${session?.model?.id ?? ""}#${routes}`;
+  const selection = [
+    selected?.providerID ?? "",
+    selected?.id ?? "",
+    selected?.variant ?? "",
+  ].join("/");
+  return `${selection}#${routes}`;
 }
 
 function readVersion(): string {
