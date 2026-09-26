@@ -124,6 +124,12 @@ export interface RouterConfig {
   maxFallbacks: number;
   probe: boolean;
   probeTimeoutMs: number;
+  /**
+   * Whether the router may resolve a provider's stored API key so an alias can
+   * authenticate to it. Off by default; see `src/credentials.ts` for why this
+   * is opt-in and what it refuses to do.
+   */
+  credentials: boolean;
   strategy: RoutingStrategy;
   minHealth: number;
   log: boolean;

@@ -71,9 +71,28 @@ An alias is therefore built only for a provider with a reachable endpoint: a
 `baseURL` in its config `options`, or the built-in `opencode` provider whose
 endpoint the router already knows. A provider with no reachable endpoint is
 skipped and logged rather than published as an alias that would fail on first
-use. Note the asymmetry with probing: a provider authenticated purely through
-`opencode auth login` probes fine, but the router cannot read that credential to
-put it on an alias, so such a provider is not aliased.
+use.
+
+A provider authenticated through `opencode auth login` needs one more thing. An
+alias carries a `baseURL` and a `body.model` but no `integrationID` — that field
+exists on `Provider.Info` and not on `Model.Info` — so OpenCode has nothing to
+resolve an auth header from, and the alias is refused with a 401 on first use.
+Setting `credentials: true` opts into reading the key out of OpenCode's own
+credential store and putting it on the alias:
+
+```json
+{ "package": "…opencode-agent-router…", "options": { "credentials": true } }
+```
+
+It is off by default because that store has no read API — `server.credential`
+ships only `credential.update` — so the key is read straight out of
+`opencode.db`, coupling the plugin to a private schema. Only `{ type: "key" }`
+credentials are used: an OAuth credential holds an access token that expires, and
+a frozen copy on a long-lived alias would die silently at expiry. Keys are held
+in a map that is never spread into a provider or model record, are resolved once
+per refresh so a mid-session `auth login` is picked up, and only a fingerprint is
+ever logged. Anything unresolvable means the provider is not aliased — never an
+alias that fails on first use.
 
 ## How it works
 

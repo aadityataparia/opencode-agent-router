@@ -1,5 +1,6 @@
 import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
+import { resolveCredential } from "./credentials";
 import {
   countMatches,
   findModel,
@@ -52,6 +53,14 @@ export const OpenCodeAgentRouter = Plugin.define({
     let timer: ReturnType<typeof setInterval> | undefined;
     let refreshing = false;
     let routerModels: Model.Info[] = [];
+    // Resolved API keys, keyed by provider id. Deliberately separate from
+    // `providerTransport`: that map is a snapshot of provider records that gets
+    // read by anything inspecting the plugin, and a secret does not belong in
+    // an object graph that wide. Rebuilt each refresh; see `refreshCredentials`.
+    const credentialKeys = new Map<
+      string,
+      { authorization: string; fingerprint: string }
+    >();
     // IDs published by the last successful refresh. Keep this separate from
     // the next inventory so a failed reload can still remove the old aliases.
     let ownedAliasIds = new Set<string>();
@@ -133,16 +142,69 @@ export const OpenCodeAgentRouter = Plugin.define({
       | undefined {
       const source = providerTransport.get(providerID);
       const settings = { ...source?.settings };
-      const headers = { ...source?.headers };
       // With no base URL there is nothing to forward to. Guessing a provider's
       // default endpoint would publish aliases that only fail on first use.
       if (typeof settings.baseURL !== "string") return undefined;
+
+      // A provider's own `Authorization` never travels with the alias: it is
+      // scoped to whatever the provider was configured for, which is not
+      // necessarily the endpoint being forwarded to. When a key is resolvable
+      // below, the correct one takes its place.
+      const headers: Record<string, string> = {};
+      for (const [name, value] of Object.entries(source?.headers ?? {})) {
+        if (name.toLowerCase() === "authorization") continue;
+        headers[name] = value;
+      }
+
+      // A provider behind a credential cannot be reached through an alias
+      // unless the key comes with it: `Provider.Info` carries an
+      // `integrationID` but `Model.Info` does not, so OpenCode has nothing to
+      // resolve an auth header from for a model a plugin published. Publishing
+      // anyway yields an alias that 401s on its first real use — worse than not
+      // publishing, because the agent loses the model it was working on.
+      if (source?.integrationID) {
+        const credential = credentialKeys.get(providerID);
+        if (!credential) return undefined;
+        headers.Authorization = credential.authorization;
+      }
 
       // Transport subset only. Never hand back the whole provider record: it
       // gets spread into the alias model, and provider-level fields (`id`,
       // `name`, `models`, `variants`) would clobber the alias's own identity
       // and get rejected by the model schema, taking the whole catalog down.
       return { package: source?.package, settings, headers };
+    }
+
+    /**
+     * Resolve an API key for every credentialed provider, once per refresh.
+     *
+     * Per refresh rather than once at startup, so `opencode auth login` during
+     * a session is picked up. Secrets live only in this map: it is never spread
+     * into a provider record, a model, or anything handed to `ctx.*`, and only
+     * the fingerprint is ever logged.
+     */
+    async function refreshCredentials(): Promise<void> {
+      credentialKeys.clear();
+      if (!config.credentials) return;
+
+      for (const [providerID, record] of providerTransport) {
+        const integrationID = record.integrationID;
+        if (!integrationID) continue;
+
+        const credential = await resolveCredential(integrationID);
+        if (credential) {
+          credentialKeys.set(providerID, credential);
+          log(
+            config.log,
+            `credential resolved for ${providerID} via ${integrationID} (key ${credential.fingerprint})`,
+          );
+          continue;
+        }
+        log(
+          config.log,
+          `no usable API key for ${providerID} via ${integrationID}; it will not be aliased`,
+        );
+      }
     }
 
     async function discover(): Promise<DiscoveredModel[]> {
@@ -529,6 +591,9 @@ export const OpenCodeAgentRouter = Plugin.define({
           log(config.log, "no routing changes; skipping provider refresh");
           return { status: "unchanged", assignments: assignments.size };
         }
+        // Before the alias set is rebuilt: `transportFor` reads the key map to
+        // decide whether a credentialed provider can be aliased at all.
+        await refreshCredentials();
         await syncRouterModels(assignments);
         lastAssignments = signature;
 
