@@ -11,7 +11,6 @@ import { Plugin } from "@opencode/plugin/tui";
  * would vanish before twenty routes could be read.
  */
 const ROUTER_PROVIDER = "model-router";
-const OPENCODE_PROVIDER = "opencode";
 const LABEL_WIDTH = 14;
 const REFRESH_MS = 1_000;
 const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
@@ -52,11 +51,13 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                     ? [current]
                     : [];
             trace(`render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`);
-            return column({ width: "100%", border: "rounded", borderColor: theme.borderActive, padding: 1 }, [
-                header(theme, readVersion()),
-                // The toggle doubles as the section label, so the control and the thing
-                // it controls are the same row.
-                toggleRow(theme, expanded, routes.length, () => {
+            return column({
+                width: "100%",
+                border: "rounded",
+                borderColor: theme.borderActive,
+                padding: 1,
+            }, [
+                header(theme, readVersion(), expanded, routes.length, () => {
                     expanded = !expanded;
                     trace(`toggle expanded=${expanded}`);
                     rebuild();
@@ -117,40 +118,72 @@ const box = (props, children = []) => element("box", props, children);
 const text = (props, children) => element("text", props, children);
 const column = (props, children) => box({ flexDirection: "column", ...props }, children);
 /** `Model Router` badge on the left, plugin version muted on the right. */
-function header(theme, version) {
-    return box({ width: "100%", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }, [
+function header(theme, version, expanded, count, onToggle) {
+    const row = box({
+        width: "100%",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+    }, [
         box({ paddingLeft: 1, paddingRight: 1, backgroundColor: theme.accent }, [
-            text({ fg: theme.background }, ["Model Router"]),
+            text({ fg: theme.background }, [
+                `${expanded ? "▾" : "▸"} Model Router (${count})`,
+            ]),
         ]),
         text({ fg: theme.textMuted, wrapMode: "none" }, [`v${version}`]),
-    ]);
-}
-function toggleRow(theme, expanded, count, onToggle) {
-    const row = box({ width: "100%", flexDirection: "row", justifyContent: "space-between" }, [
-        text({ fg: theme.text }, [`${expanded ? "▾" : "▸"} Routes`]),
-        text({ fg: theme.textMuted, wrapMode: "none" }, [`${count}`]),
     ]);
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
     const fg = options.current ? theme.text : theme.textMuted;
-    const marker = options.current ? "▸ " : "  ";
-    return box({ width: "100%", flexDirection: "row", justifyContent: "space-between", shouldFill: true }, [
-        box({ width: LABEL_WIDTH, flexShrink: 0, flexDirection: "row", shouldFill: false }, [
-            text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [`${marker}${route.agent}`]),
+    const marker = options.current ? "• " : "  ";
+    return box({
+        width: "100%",
+        flexDirection: "row",
+        justifyContent: "space-between",
+        shouldFill: true,
+    }, [
+        box({
+            width: LABEL_WIDTH,
+            flexShrink: 0,
+            flexDirection: "row",
+            shouldFill: false,
+        }, [
+            text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
+                `${marker}${route.agent}`,
+            ]),
         ]),
-        text({ fg: theme.textMuted, wrapMode: "none", truncate: true, flexShrink: 1 }, [
-            options.variant ? `${route.target} (${options.variant})` : route.target,
+        text({
+            fg: theme.textMuted,
+            wrapMode: "none",
+            truncate: true,
+            flexShrink: 1,
+        }, [
+            options.variant
+                ? `${route.target} (${options.variant})`
+                : route.target,
         ]),
     ]);
 }
 function emptyState(theme, routes, current, expanded) {
     if (routes.length === 0) {
-        return [column({ width: "100%", marginTop: 1 }, [text({ fg: theme.textMuted, wrapMode: "none" }, ["No routes published"])])];
+        return [
+            column({ width: "100%", marginTop: 1 }, [
+                text({ fg: theme.textMuted, wrapMode: "none" }, [
+                    "No routes published",
+                ]),
+            ]),
+        ];
     }
     if (expanded || current)
         return [];
-    return [column({ width: "100%", marginTop: 1 }, [text({ fg: theme.textMuted, wrapMode: "none" }, [`Select a ${ROUTER_PROVIDER} model`])])];
+    return [
+        column({ width: "100%", marginTop: 1 }, [
+            text({ fg: theme.textMuted, wrapMode: "none" }, [
+                `Select a ${ROUTER_PROVIDER} model`,
+            ]),
+        ]),
+    ];
 }
 /**
  * Click to activate, the same gesture the host's own sidebar rows use. There is
@@ -167,7 +200,8 @@ function interactive(node, onActivate) {
 function readRoutes(ctx, location) {
     const models = ctx.data.location.model.list(location) ?? [];
     return models
-        .filter((model) => model.providerID === ROUTER_PROVIDER && typeof model.body?.model === "string")
+        .filter((model) => model.providerID === ROUTER_PROVIDER &&
+        typeof model.body?.model === "string")
         .map((model) => ({ agent: model.id, target: String(model.body?.model) }))
         .sort((a, b) => a.agent.localeCompare(b.agent));
 }
@@ -198,7 +232,9 @@ function readSelection(ctx, location) {
 /** Cheap change detector for the poll loop. */
 function stateSignature(ctx) {
     const route = ctx.ui.router.current();
-    const session = route.type === "session" ? ctx.data.session.get(route.sessionID) : undefined;
+    const session = route.type === "session"
+        ? ctx.data.session.get(route.sessionID)
+        : undefined;
     const routes = readRoutes(ctx, ctx.location ?? ctx.data.location.default())
         .map((route) => `${route.agent}=${route.target}`)
         .join(",");
