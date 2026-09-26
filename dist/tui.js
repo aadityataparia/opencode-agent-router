@@ -146,17 +146,19 @@ function routeRow(theme, route, options) {
         text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
             `${marker}${route.agent}`,
         ]),
-        box({ paddingLeft: 2 }, text({
-            fg: theme.textMuted,
-            wrapMode: "none",
-            truncate: true,
-            flexShrink: 1,
-        }, [
-            "↳" +
-                (options.variant
-                    ? `${route.target} (${options.variant})`
-                    : route.target),
-        ])),
+        box({ paddingLeft: 2 }, [
+            text({
+                fg: theme.textMuted,
+                wrapMode: "none",
+                truncate: true,
+                flexShrink: 1,
+            }, [
+                "↳" +
+                    (options.variant
+                        ? `${route.target} (${options.variant})`
+                        : route.target),
+            ]),
+        ]),
     ]);
 }
 function emptyState(theme, routes, current, expanded) {
