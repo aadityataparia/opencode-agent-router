@@ -130,7 +130,7 @@ function toggleRow(theme, expanded, count, onToggle) {
         text({ fg: theme.text }, [`${expanded ? "▾" : "▸"} Routes`]),
         text({ fg: theme.textMuted, wrapMode: "none" }, [`${count}`]),
     ]);
-    return interactive(row, theme, onToggle);
+    return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
     const fg = options.current ? theme.text : theme.textMuted;
@@ -152,14 +152,13 @@ function emptyState(theme, routes, current, expanded) {
         return [];
     return [column({ width: "100%", marginTop: 1 }, [text({ fg: theme.textMuted, wrapMode: "none" }, [`Select a ${ROUTER_PROVIDER} model`])])];
 }
-/** Hover feedback and activation, matching the host's other sidebar rows. */
-function interactive(node, theme, onActivate) {
-    setProp(node, "onMouseOver", () => {
-        setProp(node, "backgroundColor", theme.background);
-    });
-    setProp(node, "onMouseOut", () => {
-        setProp(node, "backgroundColor", undefined);
-    });
+/**
+ * Click to activate, the same gesture the host's own sidebar rows use. There is
+ * deliberately no hover fill: clearing it again would mean setting a prop to
+ * `undefined`, and that behaviour is not something the panel can verify about
+ * itself. The chevron and the route count carry the affordance instead.
+ */
+function interactive(node, onActivate) {
     setProp(node, "onMouseUp", () => onActivate());
     return node;
 }

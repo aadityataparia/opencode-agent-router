@@ -115,4 +115,3 @@ runtime, the same way it provides `@opencode/plugin/tui`, so the module is
 declared locally in `src/opentui.d.ts` for typechecking instead of being
 vendored. If a future OpenCode version stops injecting it, the sidebar is the
 only thing that breaks.
-
