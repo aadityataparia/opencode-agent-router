@@ -207,60 +207,75 @@ export const OpenCodeAgentRouter = Plugin.define({
         async (model) => {
           const ref = `${model.providerID}/${model.modelID ?? model.id}`;
 
-          // A model that just failed stays out until its cooldown expires, so a
-          // dead model costs one probe per cooldown rather than one per refresh.
-          if (!force && health.isCoolingDown(model)) {
-            log(config.log, `probe ${ref} skipped (cooldown)`);
-            return { model, usable: false, probed: false };
-          }
+          // Nothing one model does may take down the pass. `mapWithConcurrency`
+          // joins with `Promise.all`, so a single rejection here would discard
+          // every other verdict in the batch and leave routing with no pool at
+          // all. A model that throws is simply an unhealthy model: record the
+          // failure so cooldown and scoring see it, and let the rest of the pass
+          // finish.
+          try {
+            // A model that just failed stays out until its cooldown expires, so a
+            // dead model costs one probe per cooldown rather than one per refresh.
+            if (!force && health.isCoolingDown(model)) {
+              log(config.log, `probe ${ref} skipped (cooldown)`);
+              return { model, usable: false, probed: false };
+            }
 
-          // A cached result is not evidence either way. In particular it must
-          // not count as recovery: a model in cooldown was never re-probed, so
-          // its provider is still unproven.
-          if (!force && !health.needsProbe(model, ttlMs)) {
-            return { model, usable: true, probed: false };
-          }
+            // A cached result is not evidence either way. In particular it must
+            // not count as recovery: a model in cooldown was never re-probed, so
+            // its provider is still unproven.
+            if (!force && !health.needsProbe(model, ttlMs)) {
+              return { model, usable: true, probed: false };
+            }
 
-          const result = await probeModel(model, model.providerID, {
-            generate: ctx.generate.text,
-            timeoutMs: config.probeTimeoutMs,
-          });
+            const result = await probeModel(model, model.providerID, {
+              generate: ctx.generate.text,
+              timeoutMs: config.probeTimeoutMs,
+            });
 
           if (result.verdict !== "inconclusive") {
-            health.recordProbe(
+              health.recordProbe(
+                model,
+                { ok: result.verdict === "ok", latencyMs: result.latencyMs },
+                cooldownMs,
+              );
+            }
+
+            if (result.verdict === "unauthorized") {
+              unauthorized.set(
+                model.providerID,
+                (unauthorized.get(model.providerID) ?? 0) + 1,
+              );
+            } else if (result.verdict === "ok") {
+              answered.add(model.providerID);
+            }
+
+            log(
+              config.log,
+              result.verdict === "ok"
+                ? `probe ${ref} ok in ${result.latencyMs}ms`
+                : result.verdict === "inconclusive"
+                  ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
+                  : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`,
+            );
+
+            // A rejected credential excludes the model too: whatever the gateway
+            // thinks of the model, it cannot serve routed traffic until the
+            // provider is reconnected. Only a throttle keeps it in the running.
+            return {
               model,
-              { ok: result.verdict === "ok", latencyMs: result.latencyMs },
-              cooldownMs,
-            );
+              usable:
+                result.verdict === "ok" || result.verdict === "inconclusive",
+              probed: true,
+            };
+          } catch (error) {
+            // Counted as a probe so the model's health actually moves; a throw
+            // that went unrecorded would leave the model looking healthy.
+            health.recordProbe(model, { ok: false, latencyMs: 0 }, cooldownMs);
+            const detail = error instanceof Error ? error.message : String(error);
+            log(config.log, `probe ${ref} threw: ${detail}`);
+            return { model, usable: false, probed: true };
           }
-
-          if (result.verdict === "unauthorized") {
-            unauthorized.set(
-              model.providerID,
-              (unauthorized.get(model.providerID) ?? 0) + 1,
-            );
-          } else if (result.verdict === "ok") {
-            answered.add(model.providerID);
-          }
-
-          log(
-            config.log,
-            result.verdict === "ok"
-              ? `probe ${ref} ok in ${result.latencyMs}ms`
-              : result.verdict === "inconclusive"
-                ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
-                : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`,
-          );
-
-          // A rejected credential excludes the model too: whatever the gateway
-          // thinks of the model, it cannot serve routed traffic until the
-          // provider is reconnected. Only a throttle keeps it in the running.
-          return {
-            model,
-            usable:
-              result.verdict === "ok" || result.verdict === "inconclusive",
-            probed: true,
-          };
         },
       );
 
