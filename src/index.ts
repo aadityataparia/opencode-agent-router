@@ -125,28 +125,32 @@ export const OpenCodeAgentRouter = Plugin.define({
       let assigned = 0;
       const failed: string[] = [];
       for (const [agentName, ref] of assignedRefs) {
-        const id = routerAgentID(agentName);
-        try {
-          // `update` is an upsert: the id need not exist yet. Gating on
-          // `editor.get(id)` skipped every agent whose file was not already
-          // loaded into the draft, so no model was ever assigned.
-          editor.update(id, (agent) => {
-            agent.id = Agent.ID.make(id);
-            agent.name = Agent.Name.make(agentName);
-            // providerID and id are separate fields, not one `provider/model` ref.
-            agent.model = {
-              providerID: Provider.ID.make(ref.providerID),
-              id: Model.ID.make(ref.modelID),
-            };
-          });
-          assigned += 1;
-        } catch (error) {
-          failed.push(`${id}: ${String(error)}`);
+        const model = {
+          providerID: Provider.ID.make(ref.providerID),
+          id: Model.ID.make(ref.modelID),
+        };
+        // Both ids get the model. `model-router/<role>` is the router's own
+        // agent, but a preset points the bare role at `model-router/<role>` as
+        // its *model*, and that model no longer exists — so dispatching the bare
+        // role failed with "Model unavailable" without the router ever being
+        // consulted. Setting the bare role here is what makes dispatch route.
+        for (const id of [routerAgentID(agentName), agentName]) {
+          try {
+            // `update` is an upsert: the id need not exist yet.
+            editor.update(id, (agent) => {
+              agent.id = Agent.ID.make(id);
+              agent.name = Agent.Name.make(agentName);
+              agent.model = model;
+            });
+            assigned += 1;
+          } catch (error) {
+            failed.push(`${id}: ${String(error)}`);
+          }
         }
       }
       log(
         config.log,
-        `agent transform: ${assigned}/${assignedRefs.size} assigned` +
+        `agent transform: ${assigned} applied for ${assignedRefs.size} role(s)` +
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
       );
     });
