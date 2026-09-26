@@ -123,7 +123,13 @@ export const OpenCodeAgentRouter = Plugin.define({
     // One registration for the plugin's lifetime, reading mutable state.
     const agentRegistration = await ctx.agent.transform((editor) => {
       let assigned = 0;
+      let preserved = 0;
       const failed: string[] = [];
+      // Providers the catalog actually knows. An empty set (before the first
+      // discovery pass) makes every bare role look unproven, so it gets written
+      // — the same outcome as before this check existed.
+      const known = new Set(catalog.map((model) => model.providerID));
+
       for (const [agentName, ref] of assignedRefs) {
         const model = {
           providerID: Provider.ID.make(ref.providerID),
@@ -135,9 +141,20 @@ export const OpenCodeAgentRouter = Plugin.define({
         // role failed with "Model unavailable" without the router ever being
         // consulted. Setting the bare role here is what makes dispatch route.
         for (const id of [routerAgentID(agentName), agentName]) {
+          const isOurs = id !== agentName;
           try {
             // `update` is an upsert: the id need not exist yet.
             editor.update(id, (agent) => {
+              // A bare role already on a real, known model was set on purpose —
+              // a `/router pin`, or a hand-written preset. Leave it alone; the
+              // router must not clobber a deliberate choice on every agent load.
+              if (!isOurs) {
+                const current = agent.model;
+                if (current && known.has(String(current.providerID))) {
+                  preserved += 1;
+                  return;
+                }
+              }
               agent.id = Agent.ID.make(id);
               agent.name = Agent.Name.make(agentName);
               agent.model = model;
@@ -150,7 +167,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       }
       log(
         config.log,
-        `agent transform: ${assigned} applied for ${assignedRefs.size} role(s)` +
+        `agent transform: ${assigned} applied, ${preserved} kept, for ${assignedRefs.size} role(s)` +
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
       );
     });
