@@ -26,17 +26,56 @@ presets.
 
 ## Configuration
 
-| Option | Meaning |
-| --- | --- |
-| `refreshMs` | Interval between refresh passes (default `60_000`). |
-| `strategy` | Routing strategy: `priority`, `round-robin`, `weighted`, `latency`, `rate`, `adaptive`. |
-| `minHealth` | Minimum health score for a model to be routable (default `0.2`). |
-| `probe` | Ping models and route only to ones that answer (default `false`, env `OCO_ROUTER_PROBE=true`). |
-| `probeTimeoutMs` | Timeout for a single probe (default `8_000`, env `OCO_ROUTER_PROBE_TIMEOUT_MS`). |
-| `maxFallbacks` | Candidate fallbacks considered per agent (default `5`). |
-| `log` | Verbose logging (env `OCO_ROUTER_LOG=true` also enables it). |
-| `agents` | Extra agent definitions (requirement categories/weights). |
-| `presets` | Which orchestrator plugin's agents to route for (env `OCO_ROUTER_PRESETS`, comma-separated). Default: auto-detected from your OpenCode config. |
+Every option can be set two ways: as a plugin option in your OpenCode config, or
+as an environment variable. They use the same schema and the same key names.
+
+```jsonc
+{
+  "plugin": [
+    [
+      "git+https://github.com/aadityataparia/opencode-agent-router.git#main",
+      {
+        "presets": ["oh-my-opencode-slim"],
+        "probe": true,
+        "strategy": "latency",
+        "refreshMs": 30000
+      }
+    ]
+  ]
+}
+```
+
+```bash
+OCO_ROUTER_PRESETS=oh-my-opencode-slim OCO_ROUTER_LOG=true opencode
+```
+
+**Precedence is environment variable → plugin option → default.** Env wins
+because it is the ad-hoc layer: it is what a one-off
+`OCO_ROUTER_LOG=true opencode` sets, and it must be able to override a
+checked-in config without editing it. An env var set to an empty string counts
+as unset, so `OCO_ROUTER_PROBE=` means "no preference" rather than `false`.
+
+| Option | Env | Meaning |
+| --- | --- | --- |
+| `refreshMs` | `OCO_ROUTER_REFRESH_MS` | Interval between refresh passes (default `60000`). |
+| `strategy` | `OCO_ROUTER_STRATEGY` | Routing strategy: `priority`, `round-robin`, `weighted`, `latency`, `rate`, `adaptive` (default `adaptive`). |
+| `minHealth` | `OCO_ROUTER_MIN_HEALTH` | Minimum health score for a model to be routable, clamped to `0..1` (default `0.2`). |
+| `probe` | `OCO_ROUTER_PROBE` | Ping models and route only to ones that answer (default `false`). |
+| `probeTimeoutMs` | `OCO_ROUTER_PROBE_TIMEOUT_MS` | Timeout for a single probe (default `8000`). |
+| `maxFallbacks` | `OCO_ROUTER_MAX_FALLBACKS` | Candidate fallbacks considered per agent (default `5`). |
+| `log` | `OCO_ROUTER_LOG` | Verbose logging (default `false`). |
+| `agents` | — | Extra agent definitions (requirement categories/weights). Always routed, regardless of preset. |
+| `presets` | `OCO_ROUTER_PRESETS` | Which orchestrator plugin's agents to route for. Default: auto-detected from your OpenCode config. |
+
+A value that cannot be used — `"soon"` for a number, `"turbo"` for a strategy,
+an unknown preset name — is reported and ignored rather than silently coerced,
+so a typo shows up in the log instead of quietly changing behaviour. With
+`log` enabled, startup prints which settings were overridden and where each came
+from:
+
+```
+routing for preset(s): oh-my-opencode-slim (config) | set: probe(config) log(config) refreshMs(env)
+```
 
 ## Agent presets
 

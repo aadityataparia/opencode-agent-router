@@ -77,5 +77,10 @@ export interface RouterConfig {
      * is resolved once at startup.
      */
     presets: PresetName[];
+    /**
+     * Agent requirement overrides declared in the plugin options. These agents are
+     * routed regardless of preset, since declaring one is an explicit opt-in.
+     */
+    agents: Record<string, AgentRequirements>;
 }
 export {};

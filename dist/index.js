@@ -5,7 +5,7 @@ import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
 import { findCandidates } from "./scorer";
 import { Router } from "./router";
-import { AGENT_NAMES, } from "./types";
+import { AGENT_NAMES } from "./types";
 import { Model, Plugin, Provider } from "@opencode/plugin";
 /**
  * The router exposes one alias model per managed agent (for example,
@@ -40,7 +40,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     setup: async (ctx) => {
         // Resolved before anything else so the preset decision is visible in the
         // log at startup rather than on the first refresh.
-        const config = loadConfig(["1", "true", "yes", "on"].includes((process.env.OCO_ROUTER_LOG ?? "").toLowerCase()));
+        const config = loadConfig(ctx.options);
         const health = new HealthStore();
         const router = new Router(health);
         let timer;
@@ -215,7 +215,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         }
         async function computeAssignments(models) {
             const assignments = new Map();
-            const userDefinedAgents = (ctx.options?.["agents"] ?? {});
+            const userDefinedAgents = config.agents;
             // Only route agents the active presets actually define. Without this the
             // router publishes aliases for every agent it has ever heard of, so a
             // slim-only user also gets sisyphus/metis/prometheus aliases for agents
