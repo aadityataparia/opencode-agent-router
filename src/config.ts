@@ -2,24 +2,10 @@ import { detectPresets, isPresetName, PRESET_NAMES, type PresetName } from "./pr
 import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
 
 /**
- * Configuration resolution.
- *
- * Every setting resolves in the same order, so a value means the same thing no
- * matter where it came from:
- *
- *   1. environment variable  (`OCO_ROUTER_*`)
- *   2. plugin options in the OpenCode config
- *   3. built-in default
- *
- * Plugin options are the object in a `plugin` tuple entry:
- *
- *   "plugin": [
- *     ["git+…/opencode-agent-router.git#main", { "probe": true }]
- *   ]
- *
- * Env wins because it is the more specific, more ad-hoc layer: it is what a
- * one-off `OCO_ROUTER_LOG=true opencode` sets, and it must be able to override a
- * checked-in config without editing it.
+ * Every setting resolves in the same order: environment variable
+ * (`OCO_ROUTER_*`), then plugin options, then the built-in default. Env wins
+ * because it is the more ad-hoc layer — it is what a one-off
+ * `OCO_ROUTER_LOG=true opencode` sets.
  */
 
 /** The `ctx.options` object the host passes to `setup`. */
@@ -50,11 +36,8 @@ class Resolver {
   constructor(private readonly options: PluginOptions) {}
 
   /**
-   * The raw value for a setting, honouring precedence.
-   *
-   * An empty environment variable is treated as unset: `OCO_ROUTER_PROBE=` in a
-   * shell means "no preference here", and letting it win would silently mean
-   * "false" over whatever the config asked for.
+   * An empty env var is unset: `OCO_ROUTER_PROBE=` means "no preference", and
+   * letting it win would silently mean `false`.
    */
   private raw(key: string): { value: unknown; source: Source } {
     const env = process.env[ENV_PREFIX + envSuffix(key)];
@@ -147,12 +130,7 @@ class Resolver {
     return fallback;
   }
 
-  /**
-   * Preset list, accepting a comma-separated string (env) or an array (config).
-   *
-   * Returns `undefined` when nothing usable was given, which is what selects
-   * auto-detection.
-   */
+  /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
   presets(key: string): PresetName[] | undefined {
     const { value, source } = this.raw(key);
     if (value === undefined) return undefined;

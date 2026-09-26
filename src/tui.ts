@@ -3,13 +3,9 @@ import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
 
 /**
- * Terminal-side companion to the server plugin. The router itself runs on the
- * server; this reads the routed agents it maintains and renders them in the
- * OpenCode sidebar.
- *
- * A sidebar rather than a command: the route list is reference information, not
- * a task. A command would cost a model turn every time it was run, and a toast
- * would vanish before twenty routes could be read.
+ * Renders the routed agents in the OpenCode sidebar. A sidebar rather than a
+ * command: the route list is reference information, and a command would cost a
+ * model turn every time it was run.
  */
 const ROUTER_AGENT_PREFIX = "model-router/";
 const LABEL_WIDTH = 14;
@@ -118,19 +114,15 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       ctx.renderer.requestRender();
     };
 
-    // Model selection is announced as an event, so react to it rather than
-    // making the panel wait out a poll interval to move the marker. The event
-    // is a nudge, not the state itself: the rebuild re-reads through
-    // `readSelection`, which resolves off-session the same way the poll does.
+    // React to the selection event rather than waiting out a poll interval; the
+    // rebuild re-reads state, so the event is only a nudge.
     let signature = "";
     const unsubscribe = ctx.data.on("session.model.selected", (event) => {
       trace(
         `model.selected ${event.data.model.providerID}/${event.data.model.id}`,
       );
       rebuild();
-      // Re-seed the signature so the poll does not rebuild the same tree again.
-      // If the event outran the data it announces, the value written here is
-      // the old one and the poll still catches the change on its next tick.
+      // Re-seed so the poll does not rebuild the same tree again.
       signature = stateSignature(ctx);
     });
 
@@ -276,10 +268,8 @@ function emptyState(
 }
 
 /**
- * Click to activate, the same gesture the host's own sidebar rows use. There is
- * deliberately no hover fill: clearing it again would mean setting a prop to
- * `undefined`, and that behaviour is not something the panel can verify about
- * itself. The chevron and the route count carry the affordance instead.
+ * Click to activate, like the host's own sidebar rows. No hover fill: clearing it
+ * means setting a prop to `undefined`.
  */
 function interactive(node: Element, onActivate: () => void): Element {
   setProp(node, "onMouseUp", () => onActivate());
@@ -289,13 +279,8 @@ function interactive(node: Element, onActivate: () => void): Element {
 /* -------------------------------------------------------------------- state */
 
 /**
- * Live routes, read from the agents the server maintains.
- *
- * Each `model-router/<agent>` agent names the real model routing chose for it,
- * so the route is simply that model reference — no endpoint reverse-mapping
- * needed, because the agent states the provider outright. An agent with no model
- * is not a route: nothing has been assigned to it yet, and listing it with an
- * empty target would read as a broken one rather than an unassigned one.
+ * Live routes, read from the agents the server maintains. An agent with no model
+ * is not a route yet, and listing it with an empty target would read as broken.
  */
 function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
   const agents = ctx.data.location.agent.list(location) ?? [];
@@ -315,14 +300,9 @@ function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
 }
 
 /**
- * The model in use right now.
- *
- * The prompt's own selection is not exposed to plugins in this OpenCode version
- * — `ui` carries only dialog, toast, format, router, panel, tabs and slot — so a
- * session is read from its own record, which holds the real model its routed
- * agent resolved to. Off a session there
- * is no record, so the primary agent's configured model stands in, since that
- * is what a new session here would start on.
+ * The model in use now. The prompt's own selection is not exposed to TUI
+ * plugins, so a session is read from its record; off a session, the primary
+ * agent's configured model stands in.
  */
 function readSelection(
   ctx: TuiContext,
@@ -343,14 +323,8 @@ function readSelection(
 }
 
 /**
- * Cheap change detector for the poll loop.
- *
- * Derived from exactly the two reads `build` performs, so the panel cannot
- * render from a value the loop is not watching. The selection goes through
- * `readSelection` rather than the session record directly: off a session the
- * panel falls back to the primary agent's configured model, and a signature
- * that only looked at the session would never notice that switch. The variant
- * is included because the current row renders it.
+ * Change detector for the poll loop, derived from the same two reads `build`
+ * performs so the panel cannot render from a value the loop is not watching.
  */
 function stateSignature(ctx: TuiContext): string {
   const location = ctx.location ?? ctx.data.location.default();

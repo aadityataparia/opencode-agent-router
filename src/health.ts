@@ -56,20 +56,14 @@ export class HealthStore {
     return Boolean(model.cooldownUntil && model.cooldownUntil > Date.now());
   }
 
-  /**
-   * True when a probe result is stale enough to be worth spending a request on.
-   * Never-probed models always need one.
-   */
+  /** True when a probe result is stale enough to re-spend a request on; never-probed models always are. */
   needsProbe(model: DiscoveredModel, ttlMs: number): boolean {
     const current = this.state.get(this.key(model));
     if (!current?.lastProbeAt) return true;
     return Date.now() - current.lastProbeAt >= ttlMs;
   }
 
-  /**
-   * Folds a probe outcome into health. A ping is scored exactly like a real
-   * request so the router learns from one signal, not two.
-   */
+  /** A ping is scored exactly like a real request, so the router learns from one signal. */
   recordProbe(
     model: DiscoveredModel,
     result: { ok: boolean; latencyMs: number },

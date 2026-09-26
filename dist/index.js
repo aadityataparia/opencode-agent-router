@@ -1,3 +1,4 @@
+import { syncRoutedAgents } from "./agent-files";
 import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
 import { countMatches, findModel, formatStatus, HELP_TEXT, modelRef, parseCommand, ROUTER_COMMAND, } from "./commands";
@@ -9,20 +10,9 @@ import { Router } from "./router";
 import { AGENT_NAMES, routerAgentID, } from "./types";
 import { Model, Plugin, Provider } from "@opencode/plugin";
 /**
- * The router owns one agent per managed role, named `model-router/<agent>`,
- * and keeps that agent's `model` pointed at whichever real model wins routing
- * this pass. A caller dispatches the role by that id and is routed for it, and
- * because the agent names a real model, OpenCode resolves the endpoint and the
- * credential itself — the router never has to stand in for a provider.
- *
- * Two consequences worth knowing before editing this:
- *
- *   - `AgentEditor` can only update agents that already exist (`update`, no
- *     `add`), so every `model-router/<agent>` id must be declared in config or
- *     by a preset. One that is not declared simply never gets a model.
- *   - A model configured on the agent takes precedence over this transform, so
- *     the ids are declared without one. Setting one pins the role by hand and
- *     opts it out of routing.
+ * One agent per managed role, `model-router/<agent>`, kept pointed at whichever
+ * real model wins routing. `AgentEditor` has no `add`, so the ids must already
+ * exist; a model configured on the agent would win over this transform.
  */
 /** Pings in flight at once; enough to keep a refresh quick, low enough to be polite. */
 const PROBE_CONCURRENCY = 6;
@@ -52,11 +42,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         let lastPoolSize = 0;
         /** Agent -> model ref, forced by `/router pin`. Session-only by design. */
         const pins = new Map();
-        /**
-         * One agent transform for the lifetime of the plugin. It reads mutable state
-         * so a periodic refresh does not stack registrations, and the editor only
-         * ever sees the assignments from the last completed pass.
-         */
+        // One registration for the plugin's lifetime, reading mutable state.
         const agentRegistration = await ctx.agent.transform((editor) => {
             for (const [agentName, model] of currentAssignments) {
                 const id = routerAgentID(agentName);
@@ -67,17 +53,22 @@ export const OpenCodeAgentRouter = Plugin.define({
                     continue;
                 }
                 editor.update(id, (agent) => {
-                    // `providerID` and `id` are separate fields on an agent's model, not
-                    // one `provider/model` string. This is the whole point of the design:
-                    // the agent names a real model, so OpenCode resolves that provider's
-                    // endpoint and credential without the router standing in for it.
+                    // providerID and id are separate fields on an agent's model, not one ref.
                     agent.model = {
                         providerID: Provider.ID.make(model.providerID),
                         id: Model.ID.make(model.modelID ?? model.id),
                     };
                 });
             }
+            const agentSync = syncRoutedAgents(routedAgentNames(), (message) => log(config.log, message));
+            if (agentSync.created.length > 0) {
+                log(config.log, `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`);
+            }
+            if (agentSync.removed.length > 0) {
+                log(config.log, `removed agent file(s) for unrouted roles: ${agentSync.removed.join(", ")}`);
+            }
         });
+        await ctx.agent.reload();
         async function discover() {
             const catalog = await ctx.model.list();
             // No self-exclusion is needed here: the router publishes no models of its
@@ -85,44 +76,20 @@ export const OpenCodeAgentRouter = Plugin.define({
             return health.merge(catalog.data.map(classifyModel));
         }
         /**
-         * Providers currently believed to be rejecting credentials, and the notice
-         * already shown for them.
-         *
-         * This is deliberately sticky rather than rebuilt per pass. A model that
-         * failed auth goes into cooldown, so on the next refresh it is skipped
-         * instead of re-probed; a set recomputed from each pass would empty out and
-         * make the notice reappear every cooldown, which is exactly the per-refresh
-         * nagging this is meant to prevent. A provider is only cleared once one of
-         * its models actually probes `ok` again.
+         * Sticky across passes: a failed model is in cooldown, so rebuilding this
+         * each pass would empty it and repeat the notice every cooldown.
          */
         const authBlocked = new Map();
         let lastAuthNotice = "";
         /**
-         * Ping every routable model and keep only the ones that answer.
-         *
-         * A published model is not a working model: the catalog happily lists
-         * entries the endpoint will not serve, and routing to one fails on the
-         * first real request. Probing first means the candidate pool only contains
-         * models that are known to work right now, and the result also feeds
-         * health and latency so scoring has something real to rank on.
-         *
-         * Every provider with a known endpoint is probed, each against its own
-         * endpoint and credentials. A provider that needs no credential (a local
-         * Ollama) is probed without an `Authorization` header rather than with a
-         * placeholder that some gateways reject outright.
-         *
-         * `force` comes from an explicit `/router refresh`. It bypasses both the
-         * probe cache and the cooldown, because the moment a user forces a refresh
-         * is usually right after reconnecting a credential — which is exactly when
-         * cooldown would keep the broken models from being re-tested and the router
-         * would report the same stale answer.
+         * Probe every routable model and keep the ones that answer, so the pool only
+         * holds models known to work. `force` (a `/router refresh`) skips the probe
+         * cache and cooldown, which is when a reconnected credential would
+         * otherwise stay unretested.
          */
         async function probeCandidates(models, force = false) {
             if (!config.probe)
                 return { models, probed: 0, usable: 0 };
-            // Every model is probeable. The request goes through OpenCode, which
-            // resolves each provider's own endpoint, SDK and credentials, so the
-            // router looks nothing up and excludes nothing up front.
             const routable = models;
             const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
             const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
@@ -132,12 +99,8 @@ export const OpenCodeAgentRouter = Plugin.define({
             const answered = new Set();
             const results = await mapWithConcurrency(routable, PROBE_CONCURRENCY, async (model) => {
                 const ref = `${model.providerID}/${model.modelID ?? model.id}`;
-                // Nothing one model does may take down the pass. `mapWithConcurrency`
-                // joins with `Promise.all`, so a single rejection here would discard
-                // every other verdict in the batch and leave routing with no pool at
-                // all. A model that throws is simply an unhealthy model: record the
-                // failure so cooldown and scoring see it, and let the rest of the pass
-                // finish.
+                // One model's failure must not void the batch: `mapWithConcurrency`
+                // joins with `Promise.all`.
                 try {
                     // A model that just failed stays out until its cooldown expires, so a
                     // dead model costs one probe per cooldown rather than one per refresh.
@@ -145,9 +108,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                         log(config.log, `probe ${ref} skipped (cooldown)`);
                         return { model, usable: false, probed: false };
                     }
-                    // A cached result is not evidence either way. In particular it must
-                    // not count as recovery: a model in cooldown was never re-probed, so
-                    // its provider is still unproven.
+                    // A cached result is not recovery: the model was never re-probed.
                     if (!force && !health.needsProbe(model, ttlMs)) {
                         return { model, usable: true, probed: false };
                     }
@@ -169,9 +130,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                         : result.verdict === "inconclusive"
                             ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
                             : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`);
-                    // A rejected credential excludes the model too: whatever the gateway
-                    // thinks of the model, it cannot serve routed traffic until the
-                    // provider is reconnected. Only a throttle keeps it in the running.
+                    // A rejected credential excludes the model; only a throttle keeps it in.
                     return {
                         model,
                         usable: result.verdict === "ok" || result.verdict === "inconclusive",
@@ -192,15 +151,10 @@ export const OpenCodeAgentRouter = Plugin.define({
                 probed: results.filter((result) => result.probed).length,
                 usable: usable.length,
             };
-            // Fold this pass into the sticky view of who is failing auth, then report
-            // only when that view changes, so a credential that stays broken is
-            // explained once instead of on every refresh.
             for (const [provider, count] of unauthorized) {
                 authBlocked.set(provider, count);
             }
-            // A provider is only cleared when it answered *and* nothing on it was
-            // rejected. A provider commonly serves both a free model that works and a
-            // paid one that needs credentials, and that mix must keep reporting.
+            // Cleared only once it answered and nothing on it was rejected.
             for (const provider of answered) {
                 if (!unauthorized.has(provider))
                     authBlocked.delete(provider);
@@ -222,9 +176,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                     console.error(`[opencode-agent-router] authentication is working again for ${recovered.join(", ")}; those models are routable again.`);
                 }
             }
-            // Every model failing at once means the endpoint, not the catalog, is
-            // having a bad moment. Emptying the pool here would delete every alias and
-            // break routing, so keep the catalog for this pass and say so loudly.
+            // Everything failing points at the endpoint, not the catalog: keep the
+            // catalog for this pass rather than emptying the pool.
             if (usable.length === 0 && routable.length > 0) {
                 console.error(`[opencode-agent-router] probe found no usable models (${routable.length} tried); keeping the catalog for this pass`);
                 return {
@@ -240,17 +193,10 @@ export const OpenCodeAgentRouter = Plugin.define({
                 usable: stats.usable,
             };
         }
-        /**
-         * Agents eligible for routing under the active presets.
-         *
-         * Shared with `/router` so the status table and the published aliases can
-         * never disagree about which agents are in scope.
-         */
+        /** Agents eligible under the active presets, shared with `/router`. */
         function routedAgentNames() {
-            // Only route agents the active presets actually define. Without this the
-            // router publishes aliases for every agent it has ever heard of, so a
-            // slim-only user also gets sisyphus/metis/prometheus aliases for agents
-            // that do not exist in their install.
+            // Only route agents the presets define, or a slim-only install would also
+            // get agents it has never heard of.
             const presetAgents = new Set(presetAgentNames(config.presets));
             return [
                 ...AGENT_NAMES.filter((name) => presetAgents.has(name)),
@@ -278,11 +224,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 if (chosen)
                     assignments.set(agentName, chosen.model);
             }
-            // Pins are the user's explicit instruction, so they are applied after
-            // routing and win over it. They resolve against the full catalog rather
-            // than the probed pool: a pinned model that is momentarily unhealthy should
-            // still be honoured and reported, not silently swapped for something else.
-            // A pin also rescues an agent that had no candidate at all.
+            // Pins win over routing and resolve against the full catalog, not the
+            // probed pool, so a momentarily unhealthy pinned model is still honoured.
             const inScope = new Set(routedAgents);
             for (const [agent, ref] of pins) {
                 if (!inScope.has(agent)) {
@@ -326,8 +269,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                     log(config.log, "no routing changes; skipping provider refresh");
                     return { status: "unchanged", assignments: assignments.size };
                 }
-                // The agent transform reads `currentAssignments`; reloading replays it
-                // so the models chosen by this pass take effect.
+                // Reloading replays the transform against this pass's assignments.
                 await ctx.agent.reload();
                 lastAssignments = signature;
                 for (const [agent, model] of assignments) {
@@ -400,9 +342,7 @@ ${text}
                         await say("Refresh failed. The published aliases were left untouched; see the log for the error.");
                         return;
                     }
-                    // Do not claim work that did not happen. With probing off, a
-                    // refresh is only a catalog re-scan, and saying "re-probed" would
-                    // imply the pool was revalidated when it was not.
+                    // With probing off a refresh is only a re-scan; do not claim a re-probe.
                     const probeNote = config.probe
                         ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
                         : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
@@ -427,9 +367,7 @@ ${text}
                             : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
                         return;
                     }
-                    // No reachability check is needed: the agent names a real model, so
-                    // OpenCode resolves that provider's endpoint and credential. A model
-                    // the router can list is a model the agent can run on.
+                    // No reachability check: a model the router can list, the agent can run.
                     pins.set(parsed.agent, modelRef(target));
                     const outcome = await applyRouting("pin");
                     await say(outcome.status === "failed"
@@ -466,11 +404,8 @@ ${text}
             }
         };
         /**
-         * `/router` — status, a forced refresh, and session-scoped pins.
-         *
-         * Replies are posted as synthetic session messages rather than prompts, so
-         * they cost no model call and the user sees exactly what the router did
-         * instead of a paraphrase of it.
+         * Replies go out as synthetic session messages, so a command costs no model
+         * call and shows the router's own output.
          */
         const commandRegistration = await ctx.command.transform((editor) => {
             editor.add({

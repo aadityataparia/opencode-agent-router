@@ -2,21 +2,11 @@ import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 /**
- * Agent presets.
- *
- * The router publishes one alias per managed agent. Which agents those are
- * depends entirely on which orchestrator plugin the user actually runs, so
- * routing every known agent unconditionally produces aliases for agents that do
- * not exist in the user's setup — clutter in the model list, and wasted model
- * discovery on every refresh.
- *
- * Each list below is that plugin's own canonical agent list, read from its
- * published package rather than hand-maintained:
- *
- * - `oh-my-opencode` / `oh-my-openagent`: the `BuiltinAgentNameSchema` enum in
- *   `<pkg>/dist/config/schema/agent-names.d.ts`. Both ship the same 11 names.
- * - `oh-my-opencode-slim`: `ALL_AGENT_NAMES` in
- *   `<pkg>/dist/config/constants.js` (`orchestrator` plus `SUBAGENT_NAMES`).
+ * Which agents are routable depends on which orchestrator plugin is installed,
+ * so routing every known agent unconditionally produces agents the user's setup
+ * does not have. Each list below is that plugin's own agent list, read from its
+ * published package: `BuiltinAgentNameSchema` in oh-my-opencode(-agent)'s
+ * `agent-names.d.ts`, `ALL_AGENT_NAMES` in oh-my-opencode-slim's `constants.js`.
  */
 /** Preset identifiers accepted by the `presets` option. */
 export const PRESET_NAMES = [
@@ -33,12 +23,7 @@ const PRESET_PACKAGES = {
 export function isPresetName(value) {
     return PRESET_NAMES.includes(value);
 }
-/**
- * Agents each preset defines, in the plugin's own naming.
- *
- * Kept as plain strings so a preset can list an agent this router has no
- * requirements for; unmatched agents are simply not routed.
- */
+/** Agents each preset defines; names this router has no requirements for are not routed. */
 export const PRESET_AGENTS = {
     "oh-my-opencode": [
         "sisyphus",
@@ -89,15 +74,9 @@ export function presetAgentNames(presets) {
     return [...names];
 }
 /**
- * Detect which presets are installed.
- *
- * The signal is deliberately the config file's `plugin` list rather than the
- * package cache: a package can sit in `~/.cache/opencode` long after it was
- * removed from the config, and routing for a plugin the user uninstalled is
- * exactly the failure this module exists to prevent.
- *
- * Returns every preset when detection is inconclusive, which preserves the
- * pre-preset behaviour instead of silently routing for nothing.
+ * Detection reads the config's `plugin` list, not the package cache: a package
+ * can sit in the cache after removal, and routing for an uninstalled plugin is
+ * what this exists to prevent. Inconclusive detection returns every preset.
  */
 export function detectPresets() {
     const declared = readDeclaredPlugins();
@@ -109,12 +88,7 @@ export function detectPresets() {
     });
     return found;
 }
-/**
- * Plugin names from the OpenCode config.
- *
- * `present` is false when no config could be read at all, which is different
- * from a config that lists no matching plugins.
- */
+/** Plugin names from the config; `present` is false when no config could be read. */
 function readDeclaredPlugins() {
     const names = [];
     for (const file of configFiles()) {
@@ -144,12 +118,8 @@ function readConfigFile(path) {
     }
 }
 /**
- * Pull plugin identifiers out of a config without a JSONC parser.
- *
- * Only the `plugin`/`plugins` array is read, and only its string elements.
- * A hand-rolled JSONC parse would have to handle comments, trailing commas and
- * escapes correctly to be trustworthy; a bounded scan for the one array this
- * needs cannot silently mangle the rest of the file.
+ * Reads only the `plugin`/`plugins` array, so no JSONC parser is needed: a
+ * bounded scan cannot mangle the rest of the file.
  */
 function extractPluginEntries(raw) {
     const entries = [];

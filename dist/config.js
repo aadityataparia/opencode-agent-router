@@ -19,11 +19,8 @@ class Resolver {
         this.options = options;
     }
     /**
-     * The raw value for a setting, honouring precedence.
-     *
-     * An empty environment variable is treated as unset: `OCO_ROUTER_PROBE=` in a
-     * shell means "no preference here", and letting it win would silently mean
-     * "false" over whatever the config asked for.
+     * An empty env var is unset: `OCO_ROUTER_PROBE=` means "no preference", and
+     * letting it win would silently mean `false`.
      */
     raw(key) {
         const env = process.env[ENV_PREFIX + envSuffix(key)];
@@ -100,12 +97,7 @@ class Resolver {
         warn(`ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${[...strategies].join(", ")}`);
         return fallback;
     }
-    /**
-     * Preset list, accepting a comma-separated string (env) or an array (config).
-     *
-     * Returns `undefined` when nothing usable was given, which is what selects
-     * auto-detection.
-     */
+    /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
     presets(key) {
         const { value, source } = this.raw(key);
         if (value === undefined)

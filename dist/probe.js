@@ -28,15 +28,8 @@ function describe(error) {
     return String(error);
 }
 /**
- * Read a verdict out of a failed generate call.
- *
- * The old hand-built request could read a structured `error.type` out of the
- * response body. Going through OpenCode means the failure arrives as whatever
- * the provider SDK threw, so the signal is matched textually. That is coarser
- * than a typed field, so the status code is preferred where one is present and
- * the wording is only consulted to separate "your credential is wrong" from
- * "this model is not served" — the two cases that mean different things to the
- * user.
+ * A failed generate call carries no structured error type, so the verdict is
+ * matched textually; the status code is preferred where one is present.
  */
 function classify(status, detail) {
     // Throttling is transient and says nothing about the model.
@@ -45,9 +38,7 @@ function classify(status, detail) {
     if (/\b(429)\b/.test(detail) || /rate.?limit|too many requests|quota exceeded/i.test(detail)) {
         return "inconclusive";
     }
-    // A rejected credential is the provider's problem, not the model's, but the
-    // model still cannot answer routed traffic — so it is excluded and the
-    // provider gets reported for re-connection.
+    // Not the model's fault, but it cannot serve traffic until the provider is back.
     if (status === 401 || status === 403)
         return "unauthorized";
     if (/\b(401|403)\b/.test(detail) ||
@@ -61,9 +52,8 @@ export async function probeModel(model, providerID, options) {
     const started = Date.now();
     let timer;
     try {
-        // OpenCode's generate call takes no abort signal, so the timeout is enforced
-        // here. The losing request is not cancellable, but its result is dropped and
-        // a stalled provider must not hold up the whole refresh pass.
+        // No abort signal on OpenCode's generate call, so the timeout is enforced
+        // here and the loser's result is dropped.
         const call = options.generate({
             prompt: PROMPT,
             model: { providerID, id: model.modelID ?? model.id },

@@ -1,8 +1,6 @@
 /**
- * Agent id prefix the router owns. Each managed role gets an agent named
- * `model-router/<agent>` whose `model` the router keeps pointed at whichever
- * real model currently wins routing, so a caller dispatches a role by a stable
- * id no matter which provider that winner sits on.
+ * Agent id prefix the router owns; each role's `model` is kept pointed at
+ * whichever real model wins routing.
  */
 export const ROUTER_AGENT_PREFIX = "model-router/";
 /** The router-owned agent id for a managed role. */

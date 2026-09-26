@@ -1,325 +1,143 @@
 # OpenCode Agent Router
 
-A dynamic OpenCode plugin that discovers models from the OpenCode runtime,
-classifies them by capability, scores them per agent, and exposes the result as
-one alias model per managed agent under the **`model-router`** provider.
+Keeps every agent on a working model, automatically.
 
-Point an agent at `model-router/<agent>` and the plugin keeps that reference
-unchanged while automatically re-routing requests to the best available real
-model. The plugin never modifies agent definitions owned by other plugins or
-presets.
+The plugin watches your model catalog, picks a healthy model for each agent, and
+points that agent at it. When a model starts failing, the next refresh moves the
+agent somewhere else. You keep one stable name per role — the model behind it
+changes.
 
-## Live control: `/router`
+## Install
 
-A slash command for inspecting and steering the router mid-session. Replies are
-posted as synthetic session messages, so they cost no model call and you see
-exactly what the router did.
-
-| command | effect |
-| --- | --- |
-| `/router` | status table: agent → model, health, pins, probe and auth state |
-| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |
-| `/router pin <agent> <model>` | force one agent onto one model |
-| `/router unpin <agent>` | drop one pin |
-| `/router unpin` | drop every pin |
-
-```
-| agent | model | health | note |
-| --- | --- | --- | --- |
-| `orchestrator` | `opencode/claude-sonnet-4` | 0.94 | — |
-| `explorer` | `opencode/gpt-5` | 0.88 | pinned |
-| `designer` | — | — | no candidate |
-```
-
-`refresh` is *forced*: it bypasses the probe cache and the failure cooldown,
-because the moment you force a refresh is usually right after reconnecting a
-credential — exactly when the cooldown would otherwise keep returning the stale
-answer.
-
-Pins are **session-only** and live in memory; they are lost on restart. A pin
-resolves against the full catalog rather than the probed pool, so a pinned model
-that is momentarily unhealthy is still honoured and shown as such rather than
-silently swapped. A pin that no longer resolves is reported in the status table
-instead of quietly reverting.
-
-## Agents
-
-**The router points an agent at a real model.** It owns one agent per managed
-role, named `model-router/<agent>`, and each refresh sets that agent's `model` to
-whichever real model won routing:
-
-```ts
-await ctx.agent.transform((editor) => {
-  for (const [agentID, model] of resolved) {
-    editor.update(agentID, (agent) => {
-      agent.model = model;
-    });
-  }
-});
-```
-
-Because the agent names a real model, OpenCode resolves that provider's endpoint,
-SDK package and credential itself. The router reads no `baseURL` and no API key
-for traffic — only for probing, and probing already goes through
-`ctx.generate.text()`. A role keeps the same `model-router/<agent>` id while its
-underlying model moves between a hosted provider and a local Ollama one, because
-nothing about the reference the caller holds changes.
-
-Two constraints follow from `AgentEditor`, which is worth knowing before
-configuring this:
-
-- **It has no `add`.** `list`, `get`, `default`, `update`, `remove` — an agent
-  that does not exist yet cannot be created here. Every `model-router/<agent>` id
-  has to be declared in config (or by a preset) or the transform has nothing to
-  fill in, and the router logs that it was skipped.
-- **A configured model wins.** Declaring the agent *with* a model opts that role
-  out of routing, so the ids are declared empty.
-
-```json
-{
-  "agent": {
-    "model-router/orchestrator": {},
-    "model-router/oracle": {},
-    "model-router/explorer": {}
-  }
-}
-```
-
-The trade this design gives up: a caller can no longer select one of these
-through a model picker, because there is no such model. Dispatch by agent id.
-
-## Providers
-
-**Probing asks OpenCode to make the call.** A probe is issued through
-`ctx.generate.text()` against a specific `provider/id`, so OpenCode resolves the
-endpoint, the SDK package and the credentials itself. Probing therefore sees
-exactly what real traffic sees: providers authenticated through
-`opencode auth login` work, and a provider with a native API is probed the way it
-is actually called rather than through an assumed OpenAI-compatible surface.
-Every model in the catalog is probeable, so none is excluded up front.
-
-This is also why a probe passing is not proof an agent will run: the probe
-authenticates as the real provider, whereas the routed agent now does too, so the
-two agree by construction. An earlier design published alias models on a
-`model-router` provider instead, and an alias could carry an endpoint without a
-credential — `integrationID` exists on `Provider.Info` but not on `Model.Info` —
-so such an alias was refused with a 401 on first use. Pointing an agent at a real
-model removes that gap instead of papering over it.
-
-## How it works
-
-1. Reads every model exposed by `ctx.model.list()`.
-2. Classifies models into `reasoning`, `coding`, `fast`, `vision`,
-   `long-context`, `cheap`, and `general` categories.
-3. Optionally performs lightweight reachability probes and maintains health,
-   latency, success/failure, and cooldown state.
-4. Builds a candidate pool independently for each managed agent and picks the
-   highest-scoring reachable model per routing strategy.
-5. Registers the virtual `model-router` provider with one alias per assigned
-   agent. Each alias carries a request-body override (`body.model`) pointing at
-   the selected real model and forwards through OpenCode's compatible endpoint.
-6. Refreshes periodically. When health or availability changes, only the alias
-   targets are re-pointed; agents keep their `model-router/<agent>` reference.
-
-## Configuration
-
-Every option can be set two ways: as a plugin option in your OpenCode config, or
-as an environment variable. They use the same schema and the same key names.
+Add it to `opencode.jsonc`:
 
 ```jsonc
 {
-  "plugin": [
-    [
-      "git+https://github.com/aadityataparia/opencode-agent-router.git#main",
-      {
-        "presets": ["oh-my-opencode-slim"],
-        "probe": true,
-        "strategy": "latency",
-        "refreshMs": 30000
-      }
-    ]
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    { "package": "git+https://github.com/aadityataparia/opencode-agent-router.git#main" }
   ]
 }
 ```
 
-```bash
-OCO_ROUTER_PRESETS=oh-my-opencode-slim OCO_ROUTER_LOG=true opencode
-```
+Restart OpenCode. On first run the plugin writes one agent file per role to
+`~/.config/opencode/agents/model-router/`.
 
-**Precedence is environment variable → plugin option → default.** Env wins
-because it is the ad-hoc layer: it is what a one-off
-`OCO_ROUTER_LOG=true opencode` sets, and it must be able to override a
-checked-in config without editing it. An env var set to an empty string counts
-as unset, so `OCO_ROUTER_PROBE=` means "no preference" rather than `false`.
+## Using it
 
-| Option | Env | Meaning |
-| --- | --- | --- |
-| `refreshMs` | `OCO_ROUTER_REFRESH_MS` | Interval between refresh passes (default `60000`). |
-| `strategy` | `OCO_ROUTER_STRATEGY` | Routing strategy: `priority`, `round-robin`, `weighted`, `latency`, `rate`, `adaptive` (default `adaptive`). |
-| `minHealth` | `OCO_ROUTER_MIN_HEALTH` | Minimum health score for a model to be routable, clamped to `0..1` (default `0.2`). |
-| `probe` | `OCO_ROUTER_PROBE` | Ping models and route only to ones that answer (default `false`). |
-| `probeTimeoutMs` | `OCO_ROUTER_PROBE_TIMEOUT_MS` | Timeout for a single probe (default `8000`). |
-| `maxFallbacks` | `OCO_ROUTER_MAX_FALLBACKS` | Candidate fallbacks considered per agent (default `5`). |
-| `log` | `OCO_ROUTER_LOG` | Verbose logging (default `false`). |
-| `agents` | — | Extra agent definitions (requirement categories/weights). Always routed, regardless of preset. |
-| `presets` | `OCO_ROUTER_PRESETS` | Which orchestrator plugin's agents to route for. Default: auto-detected from your OpenCode config. |
+Each managed role gets an agent named `model-router/<role>` — for example
+`model-router/explorer`. Point a role at that agent and the router takes over
+which model it runs on.
 
-A value that cannot be used — `"soon"` for a number, `"turbo"` for a strategy,
-an unknown preset name — is reported and ignored rather than silently coerced,
-so a typo shows up in the log instead of quietly changing behaviour. With
-`log` enabled, startup prints which settings were overridden and where each came
-from:
+To have the plugin do that for you, set the roles in your orchestrator preset to
+the routed agent instead of a model:
 
-```
-routing for preset(s): oh-my-opencode-slim (config) | set: probe(config) log(config) refreshMs(env)
-```
-
-## Agent presets
-
-The router publishes one alias per managed agent, so *which* agents it manages
-depends on which orchestrator plugin you actually run. Routing every agent the
-router has heard of would leave a slim-only user with `sisyphus` and `metis`
-aliases for agents that do not exist in their install.
-
-`presets` narrows routing to the agents a given plugin defines:
-
-| Preset | Agents |
-| --- | --- |
-| `oh-my-opencode` | atlas, explore, hephaestus, librarian, metis, momus, multimodal-looker, oracle, prometheus, sisyphus, sisyphus-junior |
-| `oh-my-openagent` | same 11 names as `oh-my-opencode` |
-| `oh-my-opencode-slim` | orchestrator, explorer, librarian, oracle, designer, fixer, observer, council, councillor |
-
-```bash
-# one preset
-OCO_ROUTER_PRESETS=oh-my-opencode-slim opencode
-
-# several at once
-OCO_ROUTER_PRESETS=oh-my-opencode,oh-my-opencode-slim opencode
-```
-
-Left unset, the router reads the `plugin` list from your OpenCode config and
-routes for the presets it finds there, so the common case needs no
-configuration. The config is the signal rather than the package cache on purpose:
-a package can sit in `~/.cache/opencode` long after you removed it from your
-config, and routing for a plugin you uninstalled is exactly what this avoids.
-If no config can be read at all, the router falls back to routing for every
-preset rather than silently routing for nothing.
-
-Agents you declare yourself under `agents` are always routed, since declaring
-one is an explicit opt-in that presets should not override.
-
-## Probing
-
-The catalog lists models the endpoint advertises, which is not the same set as
-the models that actually answer. With `probe` enabled, every refresh pings each
-candidate with a one-token completion and only models that pass become routing
-candidates. Probe latency and outcome feed the same health score as real
-traffic, so scoring has something to rank on.
-
-```bash
-OCO_ROUTER_PROBE=true OCO_ROUTER_LOG=true opencode
-```
-
-How it behaves:
-
-- **Probes go through OpenCode's own generate call**, so each provider is
-  exercised the way real traffic reaches it — its own endpoint, SDK and
-  credentials, including ones held in the auth store.
-- **Probes are re-checked, not repeated.** A model is re-pinged only after five
-  refresh intervals, and a model that just failed is skipped until its cooldown
-  expires, so a dead model costs one probe per cooldown rather than one per
-  refresh. Six probes run concurrently.
-- **A rejected credential removes the model.** A model the gateway will not
-  authenticate cannot serve routed traffic, whatever the gateway thinks of it, so
-  it is excluded like any other dead model. Throttling (429) is the one failure
-  that keeps a model, because it says nothing about the model itself.
-- **Auth failures name the provider and the fix.** The first pass that sees them
-  logs which provider rejected how many models, and points at
-  `opencode auth login`. It is reported once rather than on every refresh, and
-  again if the set of affected providers changes.
-- **A bad endpoint cannot empty the pool.** If *every* model fails at once, that
-  is the endpoint having a bad moment rather than the catalog being wrong, so the
-  catalog is kept for that pass instead of deleting every alias.
-- **Credentials matter.** Aliases forward through OpenCode's endpoint with its
-  public key, so every model that needs a real API key is excluded until you
-  connect one. Expect routing to collapse onto the free models until then, which
-  is the honest answer: the paid ones would only fail on a real request.
-
-## Usage
-
-With the plugin installed, routed models appear in the model list under
-**Model Router**, for example:
-
-```text
-model-router/orchestrator
-model-router/explorer
-model-router/designer
-model-router/sisyphus
-```
-
-Configure an agent to use a routed model:
-
-```jsonc
+```json
 {
-  "agent": {
-    "orchestrator": { "model": "model-router/orchestrator" }
+  "explorer": { "model": "model-router/explorer" },
+  "fixer": { "model": "model-router/fixer" }
+}
+```
+
+OpenCode's agent picker lists the routed agents alongside your own, and a sidebar
+panel shows what each role is currently on. Click the panel header to expand the
+full list.
+
+## `/router`
+
+Run it from OpenCode's command picker so it reaches the plugin. Replies are posted
+to the session, so they cost no model call.
+
+| command | effect |
+| --- | --- |
+| `/router` | show routing status |
+| `/router refresh` | re-scan and re-probe now, ignoring probe cache and cooldown |
+| `/router pin <agent> <model>` | force one agent onto one model |
+| `/router unpin <agent>` | drop one pin |
+| `/router unpin` | drop every pin |
+
+Pins last for the session only and are lost on restart. For a permanent change,
+edit the agent file or set `presets` in the plugin options.
+
+## Configuration
+
+Options go in the plugin entry's `options` object. Every one has an environment
+variable equivalent named `OCO_ROUTER_<OPTION>` in upper case, which wins over the
+config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
+
+| option | default | meaning |
+| --- | --- | --- |
+| `probe` | `false` | check that a model answers before routing to it |
+| `probeTimeoutMs` | `8000` | how long a single probe may take |
+| `refreshMs` | `60000` | how often to re-scan and re-assign |
+| `strategy` | `adaptive` | how to choose among healthy models: `adaptive`, `priority`, `round-robin`, `weighted`, `latency` |
+| `minHealth` | `0.2` | ignore models scoring below this, where 1 is perfect |
+| `maxFallbacks` | `5` | how many alternatives to try for one role |
+| `presets` | auto-detected | which orchestrator plugins' agents to route |
+| `agents` | `{}` | route these agents regardless of preset |
+| `log` | `false` | print routing decisions to the log |
+
+```json
+{
+  "package": "git+https://github.com/aadityataparia/opencode-agent-router.git#main",
+  "options": {
+    "probe": true,
+    "probeTimeoutMs": 5000,
+    "presets": ["oh-my-opencode-slim"]
   }
 }
 ```
 
-The plugin handles choosing the real model and re-routing it as health, latency,
-and availability change. No agent definition needs to be rewritten when the
-selected target changes.
+### Probing
 
-## Inspecting routes
+With `probe` off, the router trusts the catalog: it routes to models it can see.
+With it on, each candidate gets a real one-token request first, so a model that
+is listed but dead never gets picked. Probing costs a request per model per
+refresh, which is why it is off by default.
 
-The TUI half of the plugin adds a **Model Router** panel to the sidebar. It shows
-the model the current selection routes to:
+A provider whose credentials are rejected is reported and its models are dropped
+from the running until it works again. A model that is merely throttled stays
+eligible.
 
-```text
-┌────────────────────────────────┐
-│ Model Router            v0.1.0 │
-│                                │
-│ ▸ Routes                       │
-│ ▸ fixer    mimo-v2.6-flash-free │
-└────────────────────────────────┘
+## The agent files
+
+The plugin creates one Markdown file per role and never overwrites a file that is
+already there, so you can edit them freely:
+
+```
+~/.config/opencode/agents/model-router/explorer.md
 ```
 
-Collapsed by default, so it stays out of the way. Click **▸ Routes** to expand it
-and list every agent with its current target, current one first:
+```md
+---
+description: The explorer role, routed
+mode: subagent
+---
 
-```text
-│ ▾ Routes                  20   │
-│ ▸ fixer    mimo-v2.6-flash-free │
-│   explorer grok-code-fast-1     │
-│   oracle   gpt-5                │
-│   ...                           │
+You are the `explorer` role.
 ```
 
-The highlighted `▸` row is the session's own model, read from the session record
-so it reflects what a request would actually use. Off a session the primary
-agent's configured model stands in, since that is what a new session would start
-on.
+- Do not add a `model:` line. A model set on the agent wins over the router and
+  opts that role out of routing.
+- `mode` is `subagent` for every role except `orchestrator`, which is `all` so it
+  can also run as a session's main agent.
+- The body is the agent's system prompt, and it replaces the provider's default
+  prompt. Delete the body to inherit the provider's.
+- A role you stop routing leaves a file behind. The plugin removes it only if it
+  is still exactly what the plugin wrote; anything you have edited is left for
+  you to delete.
 
-The panel renders in the terminal and makes **no model request**. A slash command
-would not: OpenCode starts a session turn after every command, so a command that
-prints a route table costs a call to restate it.
+## Troubleshooting
 
-Set `OPENCODE_AGENT_ROUTER_TRACE` to a file path to log what the panel renders
-(selection resolved, route changes, expand/collapse) when debugging it in a real
-TUI.
+**A routed agent has no model.** The agent file is missing, or the role is not
+under the detected preset. Check `/router` for the detected presets, and confirm
+`~/.config/opencode/agents/model-router/<role>.md` exists.
 
-## Compatibility
+**Nothing routes.** A role must point at `model-router/<role>`, and the plugin
+must know the role — see `presets` above.
 
-Built and tested against the OpenCode V2 plugin API: the server half uses
-`Plugin.define`, `ctx.model.list()`, `ctx.provider.transform()`, and
-`ctx.provider.reload()`; the CLI half uses `@opencode/plugin/tui` and claims the
-`sidebar.content` slot. The provider is registered directly through the provider
-transform API so its aliases are listed as `model-router/<agent>` rather than
-being mixed into the native `opencode` provider.
+**A dispatched agent fails to start.** If the error mentions a variant, the model
+behind that role has no such variant; drop `variant` from the role's config.
 
-The TUI half declares no dependency on `@opentui/solid`: the host injects it at
-runtime, the same way it provides `@opencode/plugin/tui`, so the module is
-declared locally in `src/opentui.d.ts` for typechecking instead of being
-vendored. If a future OpenCode version stops injecting it, the sidebar is the
-only thing that breaks.
+**A model looks right but is not used.** Run `/router refresh` to bypass the
+probe cache and cooldown, and check `/router` for a rejected credential.

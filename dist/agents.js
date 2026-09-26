@@ -1,8 +1,6 @@
 const COMMON_AGENTS = {
     architect: {
         // Master delegator and strategic coordinator.
-        // Needs planning, judgment, instruction-following,
-        // reconciliation and verification.
         categories: ["reasoning", "coding", "long-context", "general"],
         weights: {
             reasoning: 1.0,
@@ -36,10 +34,7 @@ const COMMON_AGENTS = {
         contextWeight: 0.05,
     },
     vision: {
-        // Optional visual-analysis specialist.
-        //
-        // Specifically intended for images, screenshots, PDFs
-        // and diagrams when the Orchestrator is not multimodal.
+        // Optional visual-analysis specialist, for when the orchestrator is not multimodal.
         categories: ["vision", "long-context", "fast", "general"],
         weights: {
             vision: 1.0,
@@ -135,10 +130,8 @@ export const AGENT_REQUIREMENTS = {
         contextWeight: 0.15,
     },
     councillor: {
-        // An individual member of a council. Council synthesizes the consensus, so
-        // a councillor's job is to reason well and dissent usefully: it wants depth
-        // and long context, but unlike the council it should not be the most
-        // expensive model available.
+        // A council member: reason well and dissent usefully, but unlike the
+        // council it should not be the most expensive model available.
         categories: ["reasoning", "long-context", "coding"],
         weights: {
             reasoning: 1.0,
@@ -199,11 +192,8 @@ export const AGENT_REQUIREMENTS = {
         contextWeight: 0.2,
     },
     council: {
-        // Multi-LLM consensus and synthesis.
-        //
-        // Important: Council itself should use a strong synthesis
-        // model. The individual councillors are handled separately
-        // by Council's own configuration and should be diverse.
+        // Multi-LLM consensus and synthesis. Council itself wants a strong
+        // synthesis model; its councillors are configured separately.
         categories: ["reasoning", "long-context", "coding"],
         weights: {
             reasoning: 1.0,
@@ -236,11 +226,8 @@ export const AGENT_REQUIREMENTS = {
         contextWeight: 0.1,
     },
     designer: {
-        // UI/UX implementation and visual excellence.
-        //
-        // Strong frontend/coding ability is more important than
-        // generic reasoning. Vision is a useful bonus, not a
-        // mandatory capability.
+        // UI/UX implementation. Frontend/coding ability matters more than generic
+        // reasoning; vision is a bonus, not a requirement.
         categories: ["coding", "vision", "reasoning", "general"],
         weights: {
             coding: 1.0,
@@ -250,9 +237,7 @@ export const AGENT_REQUIREMENTS = {
         },
         minContext: 64000,
         tools: true,
-        // Deliberately NOT: vision: true
-        // A model can be excellent at UI implementation without
-        // accepting image input.
+        // Deliberately not vision: a model can be excellent at UI without image input.
         healthWeight: 0.2,
         latencyWeight: 0.1,
         costWeight: 0.05,

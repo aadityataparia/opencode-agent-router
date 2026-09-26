@@ -6,15 +6,9 @@ export declare class HealthStore {
     success(model: DiscoveredModel, latencyMs: number): void;
     failure(model: DiscoveredModel, cooldownMs?: number): void;
     isCoolingDown(model: DiscoveredModel): boolean;
-    /**
-     * True when a probe result is stale enough to be worth spending a request on.
-     * Never-probed models always need one.
-     */
+    /** True when a probe result is stale enough to re-spend a request on; never-probed models always are. */
     needsProbe(model: DiscoveredModel, ttlMs: number): boolean;
-    /**
-     * Folds a probe outcome into health. A ping is scored exactly like a real
-     * request so the router learns from one signal, not two.
-     */
+    /** A ping is scored exactly like a real request, so the router learns from one signal. */
     recordProbe(model: DiscoveredModel, result: {
         ok: boolean;
         latencyMs: number;

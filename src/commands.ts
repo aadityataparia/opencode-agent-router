@@ -1,15 +1,9 @@
 import type { DiscoveredModel, RouterConfig } from "./types";
 
 /**
- * Parsing and rendering for the `/router` slash command.
- *
- * Everything here is pure: it takes the text the user typed plus a snapshot of
- * router state, and returns either a decision or a block of Markdown. The
- * command handler in `index.ts` owns the mutable state and the side effects.
- *
- * Output goes to the session as a *synthetic* message rather than a prompt, so
- * showing status or applying a pin costs no model call and cannot be ignored or
- * paraphrased by the model.
+ * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
+ * state and the side effects. Output goes out as a synthetic session message, so
+ * a command costs no model call and cannot be paraphrased.
  */
 
 export const ROUTER_COMMAND = "router";
@@ -104,12 +98,9 @@ function normalize(value: string): string {
 }
 
 /**
- * Resolve a user-typed model reference against the catalog.
- *
- * Accepts `provider/model` and a bare `model`, because listing 37 models to
- * find the one provider prefix is busywork. A bare name is only accepted when it
- * is unambiguous; silently picking one of several same-named models across
- * providers would route an agent somewhere the user did not choose.
+ * Accepts `provider/model` or a bare `model`, but a bare name only when it is
+ * unambiguous — silently picking between same-named models would route an agent
+ * somewhere the user did not choose.
  */
 export function findModel(
   models: readonly DiscoveredModel[],

@@ -1,10 +1,8 @@
 import type { PresetName } from "./presets";
 
 /**
- * Agent id prefix the router owns. Each managed role gets an agent named
- * `model-router/<agent>` whose `model` the router keeps pointed at whichever
- * real model currently wins routing, so a caller dispatches a role by a stable
- * id no matter which provider that winner sits on.
+ * Agent id prefix the router owns; each role's `model` is kept pointed at
+ * whichever real model wins routing.
  */
 export const ROUTER_AGENT_PREFIX = "model-router/";
 
@@ -140,14 +138,8 @@ export interface RouterConfig {
   strategy: RoutingStrategy;
   minHealth: number;
   log: boolean;
-  /**
-   * Agent presets to route for. Empty means "use the installed plugins", which
-   * is resolved once at startup.
-   */
+  /** Agent presets to route for; empty means auto-detect at startup. */
   presets: PresetName[];
-  /**
-   * Agent requirement overrides declared in the plugin options. These agents are
-   * routed regardless of preset, since declaring one is an explicit opt-in.
-   */
+  /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */
   agents: Record<string, AgentRequirements>;
 }
