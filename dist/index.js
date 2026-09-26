@@ -8,7 +8,7 @@ import { presetAgentNames } from "./presets";
 import { findCandidates } from "./scorer";
 import { Router } from "./router";
 import { AGENT_NAMES, routerAgentID, } from "./types";
-import { Model, Plugin, Provider } from "@opencode/plugin";
+import { Agent, Model, Plugin, Provider } from "@opencode/plugin";
 /**
  * One agent per role, `model-router/<agent>`, kept pointed at the winning model.
  * `AgentEditor` has no `add`, and a model on the agent would beat the transform.
@@ -43,31 +43,42 @@ export const OpenCodeAgentRouter = Plugin.define({
         const pins = new Map();
         // One registration for the plugin's lifetime, reading mutable state.
         const agentRegistration = await ctx.agent.transform((editor) => {
+            let assigned = 0;
+            const failed = [];
             for (const [agentName, model] of currentAssignments) {
                 const id = routerAgentID(agentName);
-                // `update` mutates an agent that already exists, and the editor has no
-                // `add`. An id nobody declared is skipped rather than invented.
-                if (!editor.get(id)) {
-                    log(config.log, `${id} is not a declared agent; no model assigned`);
-                    continue;
+                try {
+                    // `update` is an upsert: the id need not exist yet. Gating on
+                    // `editor.get(id)` skipped every agent whose file was not already
+                    // loaded into the draft, so no model was ever assigned.
+                    editor.update(id, (agent) => {
+                        agent.id = Agent.ID.make(id);
+                        agent.name = Agent.Name.make(agentName);
+                        // providerID and id are separate fields, not one `provider/model` ref.
+                        agent.model = {
+                            providerID: Provider.ID.make(model.providerID),
+                            id: Model.ID.make(model.modelID ?? model.id),
+                        };
+                    });
+                    assigned += 1;
                 }
-                editor.update(id, (agent) => {
-                    // providerID and id are separate fields on an agent's model, not one ref.
-                    agent.model = {
-                        providerID: Provider.ID.make(model.providerID),
-                        id: Model.ID.make(model.modelID ?? model.id),
-                    };
-                });
+                catch (error) {
+                    failed.push(`${id}: ${String(error)}`);
+                }
             }
-            const agentSync = syncRoutedAgents(routedAgentNames(), (message) => log(config.log, message));
-            if (agentSync.created.length > 0) {
-                log(config.log, `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`);
-                log(config.log, "restart OpenCode to discover the new agent files");
-            }
-            if (agentSync.removed.length > 0) {
-                log(config.log, `removed agent file(s) for unrouted roles: ${agentSync.removed.join(", ")}`);
-            }
+            log(config.log, `agent transform: ${assigned}/${currentAssignments.size} assigned` +
+                (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""));
         });
+        // Once, at setup: writing agent files inside the transform would repeat on
+        // every reload.
+        const agentSync = syncRoutedAgents(routedAgentNames(), (message) => log(config.log, message));
+        if (agentSync.created.length > 0) {
+            log(config.log, `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`);
+            log(config.log, "restart OpenCode to discover the new agent files");
+        }
+        if (agentSync.removed.length > 0) {
+            log(config.log, `removed agent file(s) for unrouted roles: ${agentSync.removed.join(", ")}`);
+        }
         await ctx.agent.reload();
         async function discover() {
             const catalog = await ctx.model.list();
