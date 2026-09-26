@@ -61,8 +61,9 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         routes = toRoutes(agents);
         trace(
           `agent.list total=${agents.length} routed=${routes.length} ids=${agents
-            .slice(0, 12)
             .map((a) => a.id)
+            .join("|")}, models=${agents
+            .map((a) => a.model?.providerID + "/" + a.model?.id)
             .join("|")}`,
         );
       } catch (error) {
