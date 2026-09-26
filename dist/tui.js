@@ -1,4 +1,12 @@
+import { appendFileSync } from "node:fs";
 import { Plugin } from "@opencode/plugin/tui";
+const TRACE = "/private/var/folders/0g/2l9ghq956_116f7v7j53c1_m0000gn/T/opencode/router-tui-trace.log";
+function trace(event) {
+    try {
+        appendFileSync(TRACE, `${new Date().toISOString()} ${event}\n`);
+    }
+    catch { }
+}
 /**
  * Terminal-side companion to the server plugin. The router itself runs on the
  * server; this only reads the aliases the server published and renders the
@@ -14,22 +22,53 @@ const ROUTER_COMMAND = "routed-models";
 export const OpenCodeAgentRouterTui = Plugin.define({
     id: "opencode-agent-router.tui",
     setup: (ctx) => {
-        ctx.keymap.layer(() => ({
-            mode: "global",
-            priority: 10,
-            commands: [
-                {
-                    id: "opencode-agent-router.routed-models",
-                    title: "Show where the selected model routes",
-                    description: "Reads the current selection; makes no model request.",
-                    group: "Model Router",
-                    slash: { name: ROUTER_COMMAND },
-                    run: () => {
-                        void report(ctx);
-                    },
-                },
-            ],
-        }));
+        trace(`setup pid=${process.pid}`);
+        // A keymap layer is owned by a component: the keymap context only exists
+        // inside a rendered slot, so creating one directly in setup fails with
+        // "Keymap.Provider is missing". Claiming the `app` slot gives the layer a
+        // component to live in for as long as the TUI runs.
+        return ctx.ui.slot({
+            append: "app",
+            render: () => {
+                trace("render app slot");
+                // TEMPORARY probe: two layers so one run reveals both whether the app
+                // slot renders at all and which mode the prompt can actually reach.
+                ctx.keymap.layer(() => ({
+                    priority: 10,
+                    mode: "global",
+                    commands: [
+                        {
+                            id: "opencode-agent-router.routed-models",
+                            title: "Show where the selected model routes",
+                            description: "Reads the current selection; makes no model request.",
+                            group: "Model Router",
+                            slash: { name: ROUTER_COMMAND },
+                            run: () => {
+                                trace("fired global");
+                                void report(ctx);
+                            },
+                        },
+                    ],
+                }));
+                ctx.keymap.layer(() => ({
+                    priority: 10,
+                    commands: [
+                        {
+                            id: "opencode-agent-router.routed-models-default",
+                            title: "Show where the selected model routes (default mode)",
+                            description: "Probe.",
+                            group: "Model Router",
+                            slash: { name: "routed-models-default" },
+                            run: () => {
+                                trace("fired default");
+                                void report(ctx);
+                            },
+                        },
+                    ],
+                }));
+                return null;
+            },
+        });
     },
 });
 export default OpenCodeAgentRouterTui;
@@ -51,6 +90,7 @@ function currentSelection(ctx) {
 async function report(ctx) {
     const location = ctx.location ?? ctx.data.location.default();
     const selected = currentSelection(ctx);
+    trace(`report location=${JSON.stringify(location)} selected=${JSON.stringify(selected)}`);
     if (!selected) {
         ctx.ui.toast.show({
             title: "No model selected",
@@ -83,6 +123,7 @@ async function report(ctx) {
     }
     const target = models.find((model) => model.providerID === OPENCODE_PROVIDER && model.id === targetID);
     const targetLabel = target ? `${OPENCODE_PROVIDER}/${targetID}` : targetID;
+    trace(`toast ${ROUTER_PROVIDER}/${selected.id} -> ${targetLabel}`);
     ctx.ui.toast.show({
         title: `${ROUTER_PROVIDER}/${selected.id}`,
         message: `routes to ${targetLabel}`,
