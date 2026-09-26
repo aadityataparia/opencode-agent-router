@@ -4,7 +4,6 @@ import { Plugin } from "@opencode/plugin/tui";
 
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
-const LABEL_WIDTH = 14;
 const REFRESH_MS = 1_000;
 
 const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
@@ -134,18 +133,28 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       ctx.renderer.requestRender();
     };
 
-    // React to the selection event rather than waiting out a poll interval; the
-    // rebuild re-reads state, so the event is only a nudge.
     let signature = "";
-    const unsubscribe = ctx.data.on("session.model.selected", (event) => {
-      trace(
-        `model.selected ${event.data.model.providerID}/${event.data.model.id}`,
-      );
+
+    // The event is a nudge; the rebuild re-reads state, so it carries no data.
+    const onChange = (label: string): void => {
+      trace(label);
       void refreshRoutes().then(() => {
         rebuild();
         // Re-seed so the poll does not rebuild the same tree again.
         signature = stateSignature(ctx, routes);
       });
+    };
+
+    // `agent.updated` is what the server emits when the router re-assigns a
+    // role, so the panel follows a routing refresh instead of waiting for the
+    // next poll.
+    const unsubscribeAgent = ctx.data.on("agent.updated", () =>
+      onChange("agent.updated"),
+    );
+    const unsubscribe = ctx.data.on("session.model.selected", (event) => {
+      onChange(
+        `model.selected ${event.data.model.providerID}/${event.data.model.id}`,
+      );
     });
 
     const timer = setInterval(() => {
@@ -167,6 +176,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       disposed = true;
       clearInterval(timer);
       unsubscribe();
+      unsubscribeAgent();
       disposeSlot?.();
     };
   },
@@ -251,7 +261,7 @@ function routeRow(
       ]),
       text(
         {
-          fg: theme.textMuted,
+          fg: theme,
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,
