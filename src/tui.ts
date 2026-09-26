@@ -53,11 +53,18 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     let routes: Route[] = [];
     const refreshRoutes = async (): Promise<void> => {
       try {
-        const directory = ctx.location?.directory;
-        const result = await ctx.client.agent.list(
-          directory ? { location: { directory } } : {},
+        // No `location`: passing one scopes the result to that directory and
+        // drops the globally-defined routed agents, which is what the panel was
+        // seeing — an empty list from a call that succeeded.
+        const result = await ctx.client.agent.list({});
+        const agents = result.data ?? [];
+        routes = toRoutes(agents);
+        trace(
+          `agent.list total=${agents.length} routed=${routes.length} ids=${agents
+            .slice(0, 12)
+            .map((a) => a.id)
+            .join("|")}`,
         );
-        routes = toRoutes(result.data ?? []);
       } catch (error) {
         trace(`agent.list failed ${String(error)}`);
       }
