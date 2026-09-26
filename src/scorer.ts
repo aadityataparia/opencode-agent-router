@@ -1,10 +1,10 @@
-import { AGENT_REQUIREMENTS } from "./agents.js";
+import { AGENT_REQUIREMENTS } from "./agents";
 import type {
   AgentName,
   Candidate,
   DiscoveredModel,
   AgentRequirements,
-} from "./types.js";
+} from "./types";
 
 function satisfies(model: DiscoveredModel, req: AgentRequirements): boolean {
   if (req.minContext && model.context < req.minContext) return false;

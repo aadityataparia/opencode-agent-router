@@ -1,4 +1,4 @@
-import type { DiscoveredModel } from "./types.js";
+import type { DiscoveredModel } from "./types";
 
 /**
  * Reachability probing.
@@ -10,12 +10,17 @@ import type { DiscoveredModel } from "./types.js";
  */
 
 /**
- * `unusable` is a verdict about the model. `inconclusive` means the probe could
- * not tell: a rejected credential or a throttled endpoint says nothing about
- * whether the model works, and must never be allowed to shrink the candidate
- * pool on its own.
+ * A verdict about one model.
+ *
+ * - `ok` answered.
+ * - `unusable` the endpoint will not serve it.
+ * - `unauthorized` the endpoint rejected our credential. Not the model's fault,
+ *   but the model still cannot serve routed traffic, so it is excluded and the
+ *   provider is reported for re-connection.
+ * - `inconclusive` the probe could not tell (a throttled endpoint). Says
+ *   nothing about the model, so it must never shrink the pool on its own.
  */
-export type ProbeVerdict = "ok" | "unusable" | "inconclusive";
+export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
 
 export interface ProbeResult {
   readonly verdict: ProbeVerdict;
@@ -49,9 +54,14 @@ function classify(status: number, type: string | undefined): ProbeVerdict {
   // one failure that really is about the model.
   if (type === "ModelError") return "unusable";
 
-  // Credential and throttle failures are endpoint-wide, not model-specific.
-  if (type === "AuthError") return "inconclusive";
-  if (status === 401 || status === 403 || status === 429) return "inconclusive";
+  // A rejected credential is the provider's problem, not the model's, but the
+  // model still cannot answer routed traffic — so it is excluded and the
+  // provider gets reported for re-connection.
+  if (type === "AuthError") return "unauthorized";
+  if (status === 401 || status === 403) return "unauthorized";
+
+  // Throttling is transient and says nothing about the model.
+  if (status === 429) return "inconclusive";
 
   // 404/400 mean the endpoint will not serve this model; 5xx means it tried.
   return "unusable";
@@ -92,7 +102,10 @@ export async function probeModel(
       verdict: classify(response.status, errorType(detail)),
       latencyMs,
       status: response.status,
-      error: detail.slice(0, 200) || response.statusText || `HTTP ${response.status}`,
+      error:
+        detail.slice(0, 200) ||
+        response.statusText ||
+        `HTTP ${response.status}`,
     };
   } catch (error) {
     return {

@@ -1,4 +1,4 @@
-import { AGENT_REQUIREMENTS } from "./agents.js";
+import { AGENT_REQUIREMENTS } from "./agents";
 function satisfies(model, req) {
     if (req.minContext && model.context < req.minContext)
         return false;

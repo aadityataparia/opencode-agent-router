@@ -1,15 +1,15 @@
-import { loadConfig } from "./config.js";
-import { classifyModel } from "./classifier.js";
-import { HealthStore } from "./health.js";
-import { mapWithConcurrency, probeModel } from "./probe.js";
-import { findCandidates } from "./scorer.js";
-import { Router } from "./router.js";
+import { loadConfig } from "./config";
+import { classifyModel } from "./classifier";
+import { HealthStore } from "./health";
+import { mapWithConcurrency, probeModel } from "./probe";
+import { findCandidates } from "./scorer";
+import { Router } from "./router";
 import {
   AGENT_NAMES,
   AgentRequirements,
   type AgentName,
   type DiscoveredModel,
-} from "./types.js";
+} from "./types";
 import { Model, Plugin, Provider } from "@opencode/plugin";
 
 /**
@@ -108,6 +108,20 @@ export const OpenCodeAgentRouter = Plugin.define({
     }
 
     /**
+     * Providers currently believed to be rejecting credentials, and the notice
+     * already shown for them.
+     *
+     * This is deliberately sticky rather than rebuilt per pass. A model that
+     * failed auth goes into cooldown, so on the next refresh it is skipped
+     * instead of re-probed; a set recomputed from each pass would empty out and
+     * make the notice reappear every cooldown, which is exactly the per-refresh
+     * nagging this is meant to prevent. A provider is only cleared once one of
+     * its models actually probes `ok` again.
+     */
+    const authBlocked = new Map<string, number>();
+    let lastAuthNotice = "";
+
+    /**
      * Ping every routable model and keep only the ones that answer.
      *
      * A published model is not a working model: the catalog happily lists
@@ -138,6 +152,10 @@ export const OpenCodeAgentRouter = Plugin.define({
 
       const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
       const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
+      /** providerID -> models rejected for auth on this pass. */
+      const unauthorized = new Map<string, number>();
+      /** providerIDs that answered this pass, so a recovered one can be cleared. */
+      const answered = new Set<string>();
 
       const results = await mapWithConcurrency(
         routable,
@@ -152,6 +170,9 @@ export const OpenCodeAgentRouter = Plugin.define({
             return { model, usable: false };
           }
 
+          // A cached result is not evidence either way. In particular it must
+          // not count as recovery: a model in cooldown was never re-probed, so
+          // its provider is still unproven.
           if (!health.needsProbe(model, ttlMs)) {
             return { model, usable: true };
           }
@@ -170,22 +191,72 @@ export const OpenCodeAgentRouter = Plugin.define({
             );
           }
 
+          if (result.verdict === "unauthorized") {
+            unauthorized.set(
+              model.providerID,
+              (unauthorized.get(model.providerID) ?? 0) + 1,
+            );
+          } else if (result.verdict === "ok") {
+            answered.add(model.providerID);
+          }
+
           log(
             config.log,
             result.verdict === "ok"
               ? `probe ${ref} ok in ${result.latencyMs}ms`
               : result.verdict === "inconclusive"
                 ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
-                : `probe ${ref} unusable: ${result.error}`,
+                : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`,
           );
 
-          // An inconclusive probe still reached the endpoint, so the model stays
-          // in the running; only a verdict about the model removes it.
-          return { model, usable: result.verdict !== "unusable" };
+          // A rejected credential excludes the model too: whatever the gateway
+          // thinks of the model, it cannot serve routed traffic until the
+          // provider is reconnected. Only a throttle keeps it in the running.
+          return {
+            model,
+            usable: result.verdict === "ok" || result.verdict === "inconclusive",
+          };
         },
       );
 
       const usable = results.filter((result) => result.usable);
+
+      // Fold this pass into the sticky view of who is failing auth, then report
+      // only when that view changes, so a credential that stays broken is
+      // explained once instead of on every refresh.
+      for (const [provider, count] of unauthorized) {
+        authBlocked.set(provider, count);
+      }
+      // A provider is only cleared when it answered *and* nothing on it was
+      // rejected. A provider commonly serves both a free model that works and a
+      // paid one that needs credentials, and that mix must keep reporting.
+      for (const provider of answered) {
+        if (!unauthorized.has(provider)) authBlocked.delete(provider);
+      }
+
+      const blocked = [...authBlocked.entries()].sort(([a], [b]) =>
+        a.localeCompare(b),
+      );
+      const signature = blocked.map(([provider]) => provider).join(",");
+      if (signature !== lastAuthNotice) {
+        const recovered = lastAuthNotice
+          .split(",")
+          .filter((provider) => provider && !authBlocked.has(provider));
+        lastAuthNotice = signature;
+
+        if (blocked.length > 0) {
+          const detail = blocked
+            .map(([provider, count]) => `${count} model(s) on ${provider}`)
+            .join("; ");
+          console.error(
+            `[opencode-agent-router] authentication failed for ${detail}; excluded from routing. Reconnect with \`opencode auth login\`.`,
+          );
+        } else if (recovered.length > 0) {
+          console.error(
+            `[opencode-agent-router] authentication is working again for ${recovered.join(", ")}; those models are routable again.`,
+          );
+        }
+      }
 
       // Every model failing at once means the endpoint, not the catalog, is
       // having a bad moment. Emptying the pool here would delete every alias and
@@ -208,8 +279,10 @@ export const OpenCodeAgentRouter = Plugin.define({
       models: DiscoveredModel[],
     ): Promise<Map<AgentName, DiscoveredModel>> {
       const assignments = new Map<AgentName, DiscoveredModel>();
-      const userDefinedAgents = (ctx.options?.["agents"] ??
-        {}) as Record<string, AgentRequirements>;
+      const userDefinedAgents = (ctx.options?.["agents"] ?? {}) as Record<
+        string,
+        AgentRequirements
+      >;
 
       for (const agentName of [
         ...AGENT_NAMES,

@@ -1,5 +1,5 @@
-import type { AgentName, Candidate, RoutingStrategy } from "./types.js";
-import { HealthStore } from "./health.js";
+import type { AgentName, Candidate, RoutingStrategy } from "./types";
+import { HealthStore } from "./health";
 export declare class Router {
     private readonly health;
     private readonly cursors;

@@ -1,4 +1,4 @@
-import type { DiscoveredModel } from "./types.js";
+import type { DiscoveredModel } from "./types";
 /**
  * Reachability probing.
  *
@@ -8,12 +8,17 @@ import type { DiscoveredModel } from "./types.js";
  * into a fact the router can act on before it picks anything.
  */
 /**
- * `unusable` is a verdict about the model. `inconclusive` means the probe could
- * not tell: a rejected credential or a throttled endpoint says nothing about
- * whether the model works, and must never be allowed to shrink the candidate
- * pool on its own.
+ * A verdict about one model.
+ *
+ * - `ok` answered.
+ * - `unusable` the endpoint will not serve it.
+ * - `unauthorized` the endpoint rejected our credential. Not the model's fault,
+ *   but the model still cannot serve routed traffic, so it is excluded and the
+ *   provider is reported for re-connection.
+ * - `inconclusive` the probe could not tell (a throttled endpoint). Says
+ *   nothing about the model, so it must never shrink the pool on its own.
  */
-export type ProbeVerdict = "ok" | "unusable" | "inconclusive";
+export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
 export interface ProbeResult {
     readonly verdict: ProbeVerdict;
     readonly latencyMs: number;

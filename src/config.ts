@@ -1,4 +1,4 @@
-import type { RouterConfig, RoutingStrategy } from "./types.js";
+import type { RouterConfig, RoutingStrategy } from "./types";
 
 function numberEnv(name: string, fallback: number): number {
   const value = Number(process.env[name]);

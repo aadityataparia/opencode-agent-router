@@ -41,7 +41,7 @@ presets.
 
 The catalog lists models the endpoint advertises, which is not the same set as
 the models that actually answer. With `probe` enabled, every refresh pings each
-candidate with a one-token completion and only models that reply become routing
+candidate with a one-token completion and only models that pass become routing
 candidates. Probe latency and outcome feed the same health score as real
 traffic, so scoring has something to rank on.
 
@@ -58,15 +58,21 @@ How it behaves:
   refresh intervals, and a model that just failed is skipped until its cooldown
   expires, so a dead model costs one probe per cooldown rather than one per
   refresh. Six probes run concurrently.
-- **A bad endpoint cannot empty the pool.** The probe distinguishes a verdict
-  about the model (`ModelError`, 404, timeout) from a failure that says nothing
-  about it (rejected credential, 429). Only the former removes a candidate, and
-  if *every* model fails at once the catalog is kept for that pass instead of
-  deleting every alias.
+- **A rejected credential removes the model.** A model the gateway will not
+  authenticate cannot serve routed traffic, whatever the gateway thinks of it, so
+  it is excluded like any other dead model. Throttling (429) is the one failure
+  that keeps a model, because it says nothing about the model itself.
+- **Auth failures name the provider and the fix.** The first pass that sees them
+  logs which provider rejected how many models, and points at
+  `opencode auth login`. It is reported once rather than on every refresh, and
+  again if the set of affected providers changes.
+- **A bad endpoint cannot empty the pool.** If *every* model fails at once, that
+  is the endpoint having a bad moment rather than the catalog being wrong, so the
+  catalog is kept for that pass instead of deleting every alias.
 - **Credentials matter.** Aliases forward through OpenCode's endpoint with its
-  public key, so models that need a real API key probe as `inconclusive` and are
-  kept, but they will fail on a real routed request. Configure the router
-  provider with a real key if you want paid models to be routable.
+  public key, so every model that needs a real API key is excluded until you
+  connect one. Expect routing to collapse onto the free models until then, which
+  is the honest answer: the paid ones would only fail on a real request.
 
 ## Usage
 

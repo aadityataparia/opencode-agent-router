@@ -1,6 +1,37 @@
-const CODING = ["codex", "coder", "coding", "code", "codestral", "devstral", "deepseek-coder", "qwen-coder", "starcoder", "swe"];
-const REASONING = ["reason", "reasoning", "thinking", "think", "o1", "o3", "o4", "r1", "r2", "opus"];
-const FAST = ["mini", "nano", "flash", "haiku", "small", "lite", "fast", "instant"];
+const CODING = [
+    "codex",
+    "coder",
+    "coding",
+    "code",
+    "codestral",
+    "devstral",
+    "deepseek-coder",
+    "qwen-coder",
+    "starcoder",
+    "swe",
+];
+const REASONING = [
+    "reason",
+    "reasoning",
+    "thinking",
+    "think",
+    "o1",
+    "o3",
+    "o4",
+    "r1",
+    "r2",
+    "opus",
+];
+const FAST = [
+    "mini",
+    "nano",
+    "flash",
+    "haiku",
+    "small",
+    "lite",
+    "fast",
+    "instant",
+];
 const CHEAP = ["mini", "nano", "flash", "haiku", "small", "lite"];
 function contains(text, patterns) {
     return patterns.some((pattern) => text.includes(pattern));
@@ -12,14 +43,13 @@ function inputSupportsVision(model) {
     return ["image", "video", "pdf"].some((kind) => input.includes(kind));
 }
 export function classifyModel(model) {
-    const text = [
-        model?.providerID,
-        model?.id,
-        model?.name,
-        model?.family,
-    ].filter(Boolean).join(" ").toLowerCase();
+    const text = [model?.providerID, model?.id, model?.name, model?.family]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
     const categories = new Set();
-    const vision = Boolean(model?.capabilities?.vision) || inputSupportsVision(model) ||
+    const vision = Boolean(model?.capabilities?.vision) ||
+        inputSupportsVision(model) ||
         contains(text, ["vision", "vl", "multimodal"]);
     const reasoning = Boolean(model?.capabilities?.reasoning) ||
         // `reasoningField` on the catalog entry indicates the model emits

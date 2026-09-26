@@ -15,10 +15,15 @@ function classify(status, type) {
     // one failure that really is about the model.
     if (type === "ModelError")
         return "unusable";
-    // Credential and throttle failures are endpoint-wide, not model-specific.
+    // A rejected credential is the provider's problem, not the model's, but the
+    // model still cannot answer routed traffic — so it is excluded and the
+    // provider gets reported for re-connection.
     if (type === "AuthError")
-        return "inconclusive";
-    if (status === 401 || status === 403 || status === 429)
+        return "unauthorized";
+    if (status === 401 || status === 403)
+        return "unauthorized";
+    // Throttling is transient and says nothing about the model.
+    if (status === 429)
         return "inconclusive";
     // 404/400 mean the endpoint will not serve this model; 5xx means it tried.
     return "unusable";
@@ -52,7 +57,9 @@ export async function probeModel(model, options) {
             verdict: classify(response.status, errorType(detail)),
             latencyMs,
             status: response.status,
-            error: detail.slice(0, 200) || response.statusText || `HTTP ${response.status}`,
+            error: detail.slice(0, 200) ||
+                response.statusText ||
+                `HTTP ${response.status}`,
         };
     }
     catch (error) {
