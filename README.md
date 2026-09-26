@@ -9,6 +9,40 @@ unchanged while automatically re-routing requests to the best available real
 model. The plugin never modifies agent definitions owned by other plugins or
 presets.
 
+## Live control: `/router`
+
+A slash command for inspecting and steering the router mid-session. Replies are
+posted as synthetic session messages, so they cost no model call and you see
+exactly what the router did.
+
+| command | effect |
+| --- | --- |
+| `/router` | status table: agent → model, health, pins, probe and auth state |
+| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |
+| `/router pin <agent> <model>` | force one agent onto one model |
+| `/router unpin <agent>` | drop one pin |
+| `/router unpin` | drop every pin |
+
+```
+| agent | model | health | note |
+| --- | --- | --- | --- |
+| `orchestrator` | `opencode/claude-sonnet-4` | 0.94 | — |
+| `explorer` | `opencode/gpt-5` | 0.88 | pinned |
+| `designer` | — | — | no candidate |
+```
+
+`refresh` is *forced*: it bypasses the probe cache and the failure cooldown,
+because the moment you force a refresh is usually right after reconnecting a
+credential — exactly when the cooldown would otherwise keep returning the stale
+answer.
+
+Pins are **session-only** and live in memory; they are lost on restart. A pin
+resolves against the full catalog rather than the probed pool, so a pinned model
+that is momentarily unhealthy is still honoured and shown as such rather than
+silently swapped. A pin that no longer resolves is reported in the status table
+instead of quietly reverting. Pins on models outside the `opencode` provider are
+refused, since aliases can only target that provider.
+
 ## How it works
 
 1. Reads every model exposed by `ctx.model.list()`.
