@@ -204,7 +204,7 @@ function routeRow(
   return box(
     {
       width: "100%",
-      flexDirection: "row",
+      flexDirection: "column",
       justifyContent: "space-between",
       shouldFill: true,
     },
@@ -228,9 +228,10 @@ function routeRow(
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,
+          paddingLeft: 1,
         },
         [
-          options.variant
+          "↳" + options.variant
             ? `${route.target} (${options.variant})`
             : route.target,
         ],
@@ -313,7 +314,8 @@ function readRoutes(ctx: TuiContext, location: TuiLocation): Route[] {
     .map((model) => {
       const id = String(model.body?.model);
       const baseURL = model.settings?.baseURL;
-      const provider = typeof baseURL === "string" ? byEndpoint.get(baseURL) : undefined;
+      const provider =
+        typeof baseURL === "string" ? byEndpoint.get(baseURL) : undefined;
       return { agent: model.id, target: provider ? `${provider}/${id}` : id };
     })
     .sort((a, b) => a.agent.localeCompare(b.agent));

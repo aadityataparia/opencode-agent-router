@@ -139,7 +139,7 @@ function routeRow(theme, route, options) {
     const marker = options.current ? "• " : "  ";
     return box({
         width: "100%",
-        flexDirection: "row",
+        flexDirection: "column",
         justifyContent: "space-between",
         shouldFill: true,
     }, [
@@ -158,8 +158,9 @@ function routeRow(theme, route, options) {
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,
+            paddingLeft: 1,
         }, [
-            options.variant
+            "↳" + options.variant
                 ? `${route.target} (${options.variant})`
                 : route.target,
         ]),
