@@ -12,7 +12,11 @@
 export const ROUTER_COMMAND = "router";
 /** Split on whitespace. Model IDs never contain spaces, so quoting buys nothing. */
 function tokenize(text) {
-    return text.trim().split(/\s+/).filter((token) => token.length > 0);
+    return text
+        .replace("/router", "")
+        .trim()
+        .split(/\s+/)
+        .filter((token) => token.length > 0);
 }
 export function parseCommand(text) {
     const tokens = tokenize(text);
@@ -38,7 +42,10 @@ export function parseCommand(text) {
         if (rest.length === 0)
             return { kind: "unpin-all" };
         if (rest.length > 1) {
-            return { kind: "error", message: `\`unpin\` takes one agent. Use \`/router unpin\` to clear every pin.` };
+            return {
+                kind: "error",
+                message: `\`unpin\` takes one agent. Use \`/router unpin\` to clear every pin.`,
+            };
         }
         return { kind: "unpin", agent: rest[0] };
     }
@@ -158,7 +165,9 @@ export function formatStatus(view) {
     }
     if (view.lastRun) {
         const { at, reason, probed, usable } = view.lastRun;
-        const probeNote = config.probe ? ` · probed ${usable}/${probed} usable` : "";
+        const probeNote = config.probe
+            ? ` · probed ${usable}/${probed} usable`
+            : "";
         lines.push(`last refresh ${formatDuration(view.now - at)} ago (${reason})${probeNote} · next in ${formatDuration(config.refreshMs)}`);
     }
     else {

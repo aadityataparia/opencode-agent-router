@@ -25,7 +25,11 @@ export type ParsedCommand =
 
 /** Split on whitespace. Model IDs never contain spaces, so quoting buys nothing. */
 function tokenize(text: string): string[] {
-  return text.trim().split(/\s+/).filter((token) => token.length > 0);
+  return text
+    .replace("/router", "")
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
 }
 
 export function parseCommand(text: string): ParsedCommand {
@@ -54,7 +58,10 @@ export function parseCommand(text: string): ParsedCommand {
   if (verb === "unpin") {
     if (rest.length === 0) return { kind: "unpin-all" };
     if (rest.length > 1) {
-      return { kind: "error", message: `\`unpin\` takes one agent. Use \`/router unpin\` to clear every pin.` };
+      return {
+        kind: "error",
+        message: `\`unpin\` takes one agent. Use \`/router unpin\` to clear every pin.`,
+      };
     }
     return { kind: "unpin", agent: rest[0] };
   }
@@ -62,7 +69,8 @@ export function parseCommand(text: string): ParsedCommand {
   if (verb === "reset") return { kind: "unpin-all" };
 
   if (verb === "pin") {
-    if (rest[0] === "--clear" || rest[0] === "clear") return { kind: "unpin-all" };
+    if (rest[0] === "--clear" || rest[0] === "clear")
+      return { kind: "unpin-all" };
     if (rest.length < 2) {
       return {
         kind: "error",
@@ -152,7 +160,9 @@ export interface StatusView {
   coolingDown: number;
   /** Provider -> models rejected for auth, sticky across passes. */
   authBlocked: readonly (readonly [string, number])[];
-  lastRun: { at: number; reason: string; probed: number; usable: number } | undefined;
+  lastRun:
+    | { at: number; reason: string; probed: number; usable: number }
+    | undefined;
   refreshMs: number;
   now: number;
 }
@@ -210,7 +220,9 @@ export function formatStatus(view: StatusView): string {
             : `pin \`${pin}\` unavailable, routed instead`,
         );
       }
-      if (view.authBlocked.some(([provider]) => provider === model.providerID)) {
+      if (
+        view.authBlocked.some(([provider]) => provider === model.providerID)
+      ) {
         notes.push("auth blocked");
       }
 
@@ -236,12 +248,16 @@ export function formatStatus(view: StatusView): string {
 
   if (view.lastRun) {
     const { at, reason, probed, usable } = view.lastRun;
-    const probeNote = config.probe ? ` · probed ${usable}/${probed} usable` : "";
+    const probeNote = config.probe
+      ? ` · probed ${usable}/${probed} usable`
+      : "";
     lines.push(
       `last refresh ${formatDuration(view.now - at)} ago (${reason})${probeNote} · next in ${formatDuration(config.refreshMs)}`,
     );
   } else {
-    lines.push(`no refresh has completed yet · next in ${formatDuration(config.refreshMs)}`);
+    lines.push(
+      `no refresh has completed yet · next in ${formatDuration(config.refreshMs)}`,
+    );
   }
 
   return lines.join("\n");

@@ -427,6 +427,116 @@ export const OpenCodeAgentRouter = Plugin.define({
                 now,
             });
         }
+        const execute = async ({ sessionID, prompt, }) => {
+            // A failed reply must not surface as an unhandled rejection inside the
+            // host's command dispatch; the router state change already happened.
+            const say = async (text) => {
+                try {
+                    await ctx.session.synthetic({
+                        sessionID,
+                        text: `Print this message as is:
+"""
+${text}
+"""`,
+                    });
+                }
+                catch (error) {
+                    console.error("[opencode-agent-router] could not post /router output to the session", error);
+                }
+            };
+            const parsed = parseCommand(prompt.text ?? "");
+            switch (parsed.kind) {
+                case "help":
+                    await say(HELP_TEXT);
+                    return;
+                case "status":
+                    await say(renderStatus());
+                    return;
+                case "error":
+                    await say(parsed.message);
+                    return;
+                case "refresh": {
+                    // Forced: a user asking to refresh has usually just changed
+                    // something, and a cached or cooling-down answer would hide it.
+                    const outcome = await applyRouting("manual", { force: true });
+                    if (outcome.status === "busy") {
+                        await say("A refresh is already running; try again in a moment.");
+                        return;
+                    }
+                    if (outcome.status === "failed") {
+                        await say("Refresh failed. The published aliases were left untouched; see the log for the error.");
+                        return;
+                    }
+                    // Do not claim work that did not happen. With probing off, a
+                    // refresh is only a catalog re-scan, and saying "re-probed" would
+                    // imply the pool was revalidated when it was not.
+                    const probeNote = config.probe
+                        ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
+                        : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
+                    await say(outcome.status === "changed"
+                        ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
+                        : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`);
+                    return;
+                }
+                case "pin": {
+                    const agents = routedAgentNames();
+                    if (!agents.some((name) => name === parsed.agent)) {
+                        await say(agents.length === 0
+                            ? `No agents are in scope, so \`${parsed.agent}\` cannot be pinned. Set \`presets\` in the plugin options first.`
+                            : `\`${parsed.agent}\` is not routed under presets ${config.presets.join(", ") || "(none)"}. Routed agents: ${agents.join(", ")}.`);
+                        return;
+                    }
+                    const target = findModel(catalog, parsed.model);
+                    if (!target) {
+                        const matches = countMatches(catalog, parsed.model);
+                        await say(matches > 1
+                            ? `\`${parsed.model}\` matches ${matches} models; qualify it as \`provider/model\`.`
+                            : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
+                        return;
+                    }
+                    // An alias can only forward somewhere it knows how to reach.
+                    // Pinning a provider with no known endpoint would silently delete
+                    // that agent's alias, which looks like the pin "broke" the agent
+                    // rather than being refused.
+                    if (!transportFor(target.providerID)) {
+                        await say(`\`${modelRef(target)}\` is on the \`${target.providerID}\` provider, which has no known endpoint in the config, so an alias cannot forward to it. Pin refused.`);
+                        return;
+                    }
+                    pins.set(parsed.agent, modelRef(target));
+                    const outcome = await applyRouting("pin");
+                    await say(outcome.status === "failed"
+                        ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
+                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\` (alias \`${ROUTER_PROVIDER}/${parsed.agent}\`). Session-only; \`/router unpin\` to undo.`);
+                    return;
+                }
+                case "unpin": {
+                    if (!pins.has(parsed.agent)) {
+                        await say(`\`${parsed.agent}\` is not pinned.`);
+                        return;
+                    }
+                    pins.delete(parsed.agent);
+                    const outcome = await applyRouting("unpin");
+                    await say(outcome.status === "failed"
+                        ? `Removed the pin on \`${parsed.agent}\`, but re-applying routing failed; see the log.`
+                        : `Unpinned \`${parsed.agent}\`; it is routed automatically again.`);
+                    return;
+                }
+                case "unpin-all": {
+                    const count = pins.size;
+                    if (count === 0) {
+                        await say("No pins are set.");
+                        return;
+                    }
+                    const names = [...pins.keys()].join(", ");
+                    pins.clear();
+                    const outcome = await applyRouting("unpin-all");
+                    await say(outcome.status === "failed"
+                        ? `Cleared ${count} pin(s) (${names}), but re-applying routing failed; see the log.`
+                        : `Cleared ${count} pin(s) (${names}); all agents route automatically again.`);
+                    return;
+                }
+            }
+        };
         /**
          * `/router` — status, a forced refresh, and session-scoped pins.
          *
@@ -438,110 +548,7 @@ export const OpenCodeAgentRouter = Plugin.define({
             editor.add({
                 name: ROUTER_COMMAND,
                 description: "Inspect and steer the model router: status, refresh, pin an agent to a model",
-                execute: async ({ sessionID, prompt }) => {
-                    // A failed reply must not surface as an unhandled rejection inside the
-                    // host's command dispatch; the router state change already happened.
-                    const say = async (text) => {
-                        try {
-                            await ctx.session.synthetic({ sessionID, text });
-                        }
-                        catch (error) {
-                            console.error("[opencode-agent-router] could not post /router output to the session", error);
-                        }
-                    };
-                    const parsed = parseCommand(prompt.text ?? "");
-                    switch (parsed.kind) {
-                        case "help":
-                            await say(HELP_TEXT);
-                            return;
-                        case "status":
-                            await say(renderStatus());
-                            return;
-                        case "error":
-                            await say(parsed.message);
-                            return;
-                        case "refresh": {
-                            // Forced: a user asking to refresh has usually just changed
-                            // something, and a cached or cooling-down answer would hide it.
-                            const outcome = await applyRouting("manual", { force: true });
-                            if (outcome.status === "busy") {
-                                await say("A refresh is already running; try again in a moment.");
-                                return;
-                            }
-                            if (outcome.status === "failed") {
-                                await say("Refresh failed. The published aliases were left untouched; see the log for the error.");
-                                return;
-                            }
-                            // Do not claim work that did not happen. With probing off, a
-                            // refresh is only a catalog re-scan, and saying "re-probed" would
-                            // imply the pool was revalidated when it was not.
-                            const probeNote = config.probe
-                                ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
-                                : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
-                            await say(outcome.status === "changed"
-                                ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
-                                : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`);
-                            return;
-                        }
-                        case "pin": {
-                            const agents = routedAgentNames();
-                            if (!agents.some((name) => name === parsed.agent)) {
-                                await say(agents.length === 0
-                                    ? `No agents are in scope, so \`${parsed.agent}\` cannot be pinned. Set \`presets\` in the plugin options first.`
-                                    : `\`${parsed.agent}\` is not routed under presets ${config.presets.join(", ") || "(none)"}. Routed agents: ${agents.join(", ")}.`);
-                                return;
-                            }
-                            const target = findModel(catalog, parsed.model);
-                            if (!target) {
-                                const matches = countMatches(catalog, parsed.model);
-                                await say(matches > 1
-                                    ? `\`${parsed.model}\` matches ${matches} models; qualify it as \`provider/model\`.`
-                                    : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
-                                return;
-                            }
-                            // An alias can only forward somewhere it knows how to reach.
-                            // Pinning a provider with no known endpoint would silently delete
-                            // that agent's alias, which looks like the pin "broke" the agent
-                            // rather than being refused.
-                            if (!transportFor(target.providerID)) {
-                                await say(`\`${modelRef(target)}\` is on the \`${target.providerID}\` provider, which has no known endpoint in the config, so an alias cannot forward to it. Pin refused.`);
-                                return;
-                            }
-                            pins.set(parsed.agent, modelRef(target));
-                            const outcome = await applyRouting("pin");
-                            await say(outcome.status === "failed"
-                                ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-                                : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\` (alias \`${ROUTER_PROVIDER}/${parsed.agent}\`). Session-only; \`/router unpin\` to undo.`);
-                            return;
-                        }
-                        case "unpin": {
-                            if (!pins.has(parsed.agent)) {
-                                await say(`\`${parsed.agent}\` is not pinned.`);
-                                return;
-                            }
-                            pins.delete(parsed.agent);
-                            const outcome = await applyRouting("unpin");
-                            await say(outcome.status === "failed"
-                                ? `Removed the pin on \`${parsed.agent}\`, but re-applying routing failed; see the log.`
-                                : `Unpinned \`${parsed.agent}\`; it is routed automatically again.`);
-                            return;
-                        }
-                        case "unpin-all": {
-                            const count = pins.size;
-                            if (count === 0) {
-                                await say("No pins are set.");
-                                return;
-                            }
-                            const names = [...pins.keys()].join(", ");
-                            pins.clear();
-                            const outcome = await applyRouting("unpin-all");
-                            await say(outcome.status === "failed"
-                                ? `Cleared ${count} pin(s) (${names}), but re-applying routing failed; see the log.`
-                                : `Cleared ${count} pin(s) (${names}); all agents route automatically again.`);
-                            return;
-                        }
-                    }
-                },
+                execute,
             });
         });
         // Make the provider available before the first model discovery pass.
