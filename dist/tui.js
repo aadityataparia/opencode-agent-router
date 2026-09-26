@@ -79,13 +79,32 @@ export default OpenCodeAgentRouterTui;
  */
 function currentSelection(ctx) {
     const ui = ctx.ui;
-    const fromPrompt = ui.model?.current?.();
-    if (fromPrompt)
-        return fromPrompt;
+    trace(`probe ui.keys=${Object.keys(ctx.ui).join(",")}`);
+    trace(`probe ui.model typeof=${typeof ui.model} keys=${Object.keys(ui.model ?? {}).join(",")}`);
+    try {
+        trace(`probe ui.model.current=${JSON.stringify(ui.model?.current?.())}`);
+    }
+    catch (error) {
+        trace(`probe ui.model.current threw=${String(error)}`);
+    }
     const route = ctx.ui.router.current();
-    if (route.type !== "session")
+    trace(`probe router.current=${JSON.stringify(route)}`);
+    if (route.type !== "session") {
+        try {
+            const recent = ctx.data.session
+                .list()
+                .slice(0, 3)
+                .map((s) => ({ id: s.id, model: s.model, agent: s.agent }));
+            trace(`probe session.list=${JSON.stringify(recent)}`);
+        }
+        catch (error) {
+            trace(`probe session.list threw=${String(error)}`);
+        }
         return undefined;
-    return ctx.data.session.get(route.sessionID)?.model;
+    }
+    const model = ctx.data.session.get(route.sessionID)?.model;
+    trace(`probe session.model=${JSON.stringify(model)}`);
+    return model;
 }
 async function report(ctx) {
     const location = ctx.location ?? ctx.data.location.default();
