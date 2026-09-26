@@ -151,10 +151,22 @@ export const OpenCodeAgentRouter = Plugin.define({
       );
     });
 
+    // Restored first, so the files written below carry the last known model
+    // rather than none. A cold `opencode run` reads those files while config
+    // loads, before any session exists.
+    await loadAssignments();
+
     // Once, at setup: writing agent files inside the transform would repeat on
     // every reload.
-    const agentSync = syncRoutedAgents(routedAgentNames(), (message) =>
-      log(config.log, message),
+    const agentSync = syncRoutedAgents(
+      routedAgentNames(),
+      new Map(
+        [...assignedRefs].map(([agent, ref]) => [
+          agent,
+          `${ref.providerID}/${ref.modelID}`,
+        ]),
+      ),
+      (message: string) => log(config.log, message),
     );
     if (agentSync.created.length > 0) {
       log(
@@ -170,9 +182,6 @@ export const OpenCodeAgentRouter = Plugin.define({
       );
     }
 
-    // Restored before the first reload, so a restart or a fresh session finds a
-    // model already assigned rather than waiting on the first probe pass.
-    await loadAssignments();
     await ctx.agent.reload();
 
     async function discover(): Promise<DiscoveredModel[]> {
@@ -430,6 +439,18 @@ export const OpenCodeAgentRouter = Plugin.define({
 
         const assignments = await computeAssignments(models, discovered);
         currentAssignments = assignments;
+        // The agent files carry the model for the next cold start, so they are
+        // rewritten whenever routing moves one.
+        syncRoutedAgents(
+          routedAgentNames(),
+          new Map(
+            [...assignments].map(([agent, model]) => [
+              agent,
+              `${model.providerID}/${model.modelID ?? model.id}`,
+            ]),
+          ),
+          (message: string) => log(config.log, message),
+        );
         // Persisted before the reload below, so the transform and every session
         // that starts before the next pass see the same mapping.
         await saveAssignments(assignments);

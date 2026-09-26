@@ -32,12 +32,17 @@ function agentsDir(): string {
   return join(base, "opencode", "agents", ROUTER_AGENT_PREFIX);
 }
 
-function document(name: string): string {
+function document(name: string, model?: string): string {
   const mode = PRIMARY_ROLES.has(name) ? "all" : "subagent";
   return [
     "---",
     `description: The ${name} role, with its model chosen and health-tracked by the model router. Dispatch this instead of the unprefixed ${name} to get automatic re-routing.`,
     `mode: ${mode}`,
+    // Written here as well as through the transform: agent files are read while
+    // config loads, before any session exists. A cold `opencode run` otherwise
+    // resolves the agent before async setup can assign one, and falls back to
+    // the session's own model.
+    ...(model ? [`model: ${model}`] : []),
     "---",
     "",
     `You are the \`${name}\` role.`,
@@ -54,9 +59,19 @@ function document(name: string): string {
   ].join("\n");
 }
 
+/**
+ * True when `current` is this module's own file, with or without a model line.
+ * Anything else was edited by the user, and is never rewritten or removed.
+ */
+function isOurs(name: string, current: string): boolean {
+  return current.replace(/^model: .*\n/m, "") === document(name);
+}
+
 export interface AgentSync {
   /** Ids written because no file existed for them. */
   readonly created: string[];
+  /** Ids whose model line was rewritten because routing moved them. */
+  readonly updated: string[];
   /** Files removed because the role is no longer routed and the file was ours. */
   readonly removed: string[];
   /** Stale files kept because their contents are not what we would have written. */
@@ -69,9 +84,11 @@ export interface AgentSync {
  */
 export function syncRoutedAgents(
   names: readonly string[],
+  models: ReadonlyMap<string, string> = new Map(),
   onWarn: (message: string) => void = () => {},
 ): AgentSync {
   const created: string[] = [];
+  const updated: string[] = [];
   const removed: string[] = [];
   const kept: string[] = [];
   const dir = agentsDir();
@@ -80,7 +97,7 @@ export function syncRoutedAgents(
     mkdirSync(dir, { recursive: true });
   } catch (error) {
     onWarn(`could not create ${dir}: ${describeError(error)}`);
-    return { created, removed, kept };
+    return { created, updated, removed, kept };
   }
 
   const routed = new Set<string>();
@@ -92,9 +109,32 @@ export function syncRoutedAgents(
     routed.add(name);
 
     const file = join(dir, `${name}.md`);
-    if (existsSync(file)) continue;
+    const ref = models.get(name);
+    const wanted = document(name, ref);
+
+    if (existsSync(file)) {
+      let current: string;
+      try {
+        current = readFileSync(file, "utf8");
+      } catch (error) {
+        onWarn(`could not read ${file}: ${describeError(error)}`);
+        continue;
+      }
+      // Rewrite only our own file, and only when the model actually moved. A
+      // hand-edited file is left exactly as it is.
+      if (current !== wanted && isOurs(name, current)) {
+        try {
+          writeFileSync(file, wanted, "utf8");
+          updated.push(`${ROUTER_AGENT_PREFIX}${name}`);
+        } catch (error) {
+          onWarn(`could not update ${file}: ${describeError(error)}`);
+        }
+      }
+      continue;
+    }
+
     try {
-      writeFileSync(file, document(name), "utf8");
+      writeFileSync(file, wanted, "utf8");
       created.push(`${ROUTER_AGENT_PREFIX}${name}`);
     } catch (error) {
       onWarn(`could not write ${file}: ${describeError(error)}`);
@@ -115,7 +155,7 @@ export function syncRoutedAgents(
     }
 
     // Only ever delete a file still byte-for-byte what we would have written.
-    if (current !== document(name)) {
+    if (!isOurs(name, current)) {
       kept.push(`${ROUTER_AGENT_PREFIX}${name}`);
       onWarn(
         `keeping ${file}: it is not the router's own, so removing it is left to you`,
@@ -130,7 +170,7 @@ export function syncRoutedAgents(
     }
   }
 
-  return { created, removed, kept };
+  return { created, updated, removed, kept };
 }
 
 /** `*.md` agent files in `dir`, ignoring dotfiles and non-agent names. */

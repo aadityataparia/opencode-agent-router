@@ -127,9 +127,16 @@ export const OpenCodeAgentRouter = Plugin.define({
             log(config.log, `agent transform: ${assigned}/${assignedRefs.size} assigned` +
                 (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""));
         });
+        // Restored first, so the files written below carry the last known model
+        // rather than none. A cold `opencode run` reads those files while config
+        // loads, before any session exists.
+        await loadAssignments();
         // Once, at setup: writing agent files inside the transform would repeat on
         // every reload.
-        const agentSync = syncRoutedAgents(routedAgentNames(), (message) => log(config.log, message));
+        const agentSync = syncRoutedAgents(routedAgentNames(), new Map([...assignedRefs].map(([agent, ref]) => [
+            agent,
+            `${ref.providerID}/${ref.modelID}`,
+        ])), (message) => log(config.log, message));
         if (agentSync.created.length > 0) {
             log(config.log, `created ${agentSync.created.length} routed agent(s): ${agentSync.created.join(", ")}`);
             log(config.log, "restart OpenCode to discover the new agent files");
@@ -137,9 +144,6 @@ export const OpenCodeAgentRouter = Plugin.define({
         if (agentSync.removed.length > 0) {
             log(config.log, `removed agent file(s) for unrouted roles: ${agentSync.removed.join(", ")}`);
         }
-        // Restored before the first reload, so a restart or a fresh session finds a
-        // model already assigned rather than waiting on the first probe pass.
-        await loadAssignments();
         await ctx.agent.reload();
         async function discover() {
             const catalog = await ctx.model.list();
@@ -320,6 +324,12 @@ export const OpenCodeAgentRouter = Plugin.define({
                 lastPoolSize = models.length;
                 const assignments = await computeAssignments(models, discovered);
                 currentAssignments = assignments;
+                // The agent files carry the model for the next cold start, so they are
+                // rewritten whenever routing moves one.
+                syncRoutedAgents(routedAgentNames(), new Map([...assignments].map(([agent, model]) => [
+                    agent,
+                    `${model.providerID}/${model.modelID ?? model.id}`,
+                ])), (message) => log(config.log, message));
                 // Persisted before the reload below, so the transform and every session
                 // that starts before the next pass see the same mapping.
                 await saveAssignments(assignments);
