@@ -1,7 +1,7 @@
 import { syncRoutedAgents } from "./agent-files";
 import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
-import { countMatches, findModel, formatStatus, HELP_TEXT, modelRef, parseCommand, ROUTER_COMMAND, } from "./commands";
+import { countMatches, findModel, formatStatus, formatUsable, HELP_TEXT, modelRef, parseCommand, ROUTER_COMMAND, } from "./commands";
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
@@ -303,6 +303,28 @@ export const OpenCodeAgentRouter = Plugin.define({
                 lastRun,
                 refreshMs: config.refreshMs,
                 now,
+                pool: usablePool(),
+            });
+        }
+        /** The models a routing pass could pick from, best health first. */
+        function usablePool() {
+            return catalog.filter((model) => !health.isCoolingDown(model) && model.health >= config.minHealth);
+        }
+        function renderUsable() {
+            return formatUsable({
+                config,
+                assignments: currentAssignments,
+                pins,
+                routedAgents: routedAgentNames(),
+                discovered: catalog.length,
+                routable: lastPoolSize,
+                pool: usablePool(),
+                coolingDown: catalog.filter((model) => health.isCoolingDown(model))
+                    .length,
+                authBlocked: [...authBlocked.entries()].sort(([a], [b]) => a.localeCompare(b)),
+                lastRun,
+                refreshMs: config.refreshMs,
+                now: Date.now(),
             });
         }
         const execute = async ({ sessionID, prompt, }) => {
@@ -329,6 +351,9 @@ ${text}
                     return;
                 case "status":
                     await say(renderStatus());
+                    return;
+                case "usable":
+                    await say(renderUsable());
                     return;
                 case "error":
                     await say(parsed.message);

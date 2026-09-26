@@ -5,6 +5,7 @@ import {
   countMatches,
   findModel,
   formatStatus,
+  formatUsable,
   HELP_TEXT,
   modelRef,
   parseCommand,
@@ -423,6 +424,34 @@ export const OpenCodeAgentRouter = Plugin.define({
         lastRun,
         refreshMs: config.refreshMs,
         now,
+        pool: usablePool(),
+      });
+    }
+
+    /** The models a routing pass could pick from, best health first. */
+    function usablePool(): DiscoveredModel[] {
+      return catalog.filter(
+        (model) => !health.isCoolingDown(model) && model.health >= config.minHealth,
+      );
+    }
+
+    function renderUsable(): string {
+      return formatUsable({
+        config,
+        assignments: currentAssignments,
+        pins,
+        routedAgents: routedAgentNames(),
+        discovered: catalog.length,
+        routable: lastPoolSize,
+        pool: usablePool(),
+        coolingDown: catalog.filter((model) => health.isCoolingDown(model))
+          .length,
+        authBlocked: [...authBlocked.entries()].sort(([a], [b]) =>
+          a.localeCompare(b),
+        ),
+        lastRun,
+        refreshMs: config.refreshMs,
+        now: Date.now(),
       });
     }
 
@@ -460,6 +489,10 @@ ${text}
 
         case "status":
           await say(renderStatus());
+          return;
+
+        case "usable":
+          await say(renderUsable());
           return;
 
         case "error":

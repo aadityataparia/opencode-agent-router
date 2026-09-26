@@ -12,6 +12,8 @@ export type ParsedCommand = {
 } | {
     kind: "refresh";
 } | {
+    kind: "usable";
+} | {
     kind: "pin";
     agent: string;
     model: string;
@@ -46,6 +48,8 @@ export interface StatusView {
     discovered: number;
     /** Models left in the pool after probing. */
     routable: number;
+    /** The pool itself, for `/router usable`. */
+    pool: readonly DiscoveredModel[];
     coolingDown: number;
     /** Provider -> models rejected for auth, sticky across passes. */
     authBlocked: readonly (readonly [string, number])[];
@@ -59,4 +63,6 @@ export interface StatusView {
     now: number;
 }
 export declare function formatStatus(view: StatusView): string;
+/** The pool a routing pass can choose from, for `/router usable`. */
+export declare function formatUsable(view: StatusView): string;
 export declare const HELP_TEXT: string;

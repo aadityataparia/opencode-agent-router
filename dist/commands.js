@@ -45,6 +45,11 @@ export function parseCommand(text) {
     }
     if (verb === "reset")
         return { kind: "unpin-all" };
+    if (verb === "usable" || verb === "models" || verb === "pool") {
+        return rest.length === 0
+            ? { kind: "usable" }
+            : { kind: "error", message: `\`usable\` takes no arguments.` };
+    }
     if (verb === "pin") {
         if (rest[0] === "--clear" || rest[0] === "clear")
             return { kind: "unpin-all" };
@@ -166,12 +171,46 @@ export function formatStatus(view) {
     }
     return lines.join("\n");
 }
+/** The pool a routing pass can choose from, for `/router usable`. */
+export function formatUsable(view) {
+    const lines = [];
+    const pool = [...view.pool].sort((a, b) => {
+        if (b.health !== a.health)
+            return b.health - a.health;
+        return modelRef(a).localeCompare(modelRef(b));
+    });
+    if (pool.length === 0) {
+        return [
+            "No models are routable right now.",
+            "",
+            "Every discovered model is either unusable or in cooldown. Run",
+            "`/router refresh` to re-probe, and check the status for an auth block.",
+        ].join("\n");
+    }
+    lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`);
+    lines.push("");
+    lines.push("| model | health | latency |");
+    lines.push("| --- | --- | --- |");
+    for (const model of pool) {
+        const latency = model.lastProbeAt === undefined
+            ? "—"
+            : model.latencyMs > 0
+                ? `${model.latencyMs}ms`
+                : "—";
+        const seen = model.lastProbeAt === undefined
+            ? ""
+            : ` · ${model.successes} ok / ${model.failures} failed`;
+        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${latency}${seen} |`);
+    }
+    return lines.join("\n");
+}
 export const HELP_TEXT = [
     "**/router** — inspect and steer the model router",
     "",
     "| command | effect |",
     "| --- | --- |",
     "| `/router` | show routing status |",
+    "| `/router usable` | list every model the router can currently pick |",
     "| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |",
     "| `/router pin <agent> <model>` | force one agent onto one model |",
     "| `/router unpin <agent>` | drop one pin |",
