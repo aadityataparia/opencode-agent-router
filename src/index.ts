@@ -506,6 +506,7 @@ export const OpenCodeAgentRouter = Plugin.define({
             : undefined;
           if (
             selectedModel &&
+            opts.session.model?.providerID !== selectedModel.model.providerID &&
             opts.session.model?.id !== selectedModel.model.id
           ) {
             await ctx.session.switchModel({
