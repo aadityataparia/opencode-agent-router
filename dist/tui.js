@@ -58,7 +58,6 @@ export const OpenCodeAgentRouterTui = Plugin.define({
             return column({
                 width: "100%",
                 border: "rounded",
-                borderColor: theme.borderActive,
                 padding: 1,
             }, [
                 header(theme, readVersion(), expanded, routes.length, () => {
@@ -151,17 +150,17 @@ function header(theme, version, expanded, count, onToggle) {
         justifyContent: "space-between",
         alignItems: "center",
     }, [
-        box({ paddingRight: 1, backgroundColor: theme.accent }, [
-            text({ fg: theme.background }, [
+        box({ paddingRight: 1, backgroundColor: theme.background.raised }, [
+            text({ fg: theme.text.base, fontWeight: "bold" }, [
                 `${expanded ? "▼" : "▶"} Model Router (${count})`,
             ]),
         ]),
-        text({ fg: theme.textMuted, wrapMode: "none" }, [`v${version}`]),
+        text({ fg: theme.text.muted, wrapMode: "none" }, [`v${version}`]),
     ]);
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
-    const fg = options.current ? theme.text : theme.textMuted;
+    const fg = options.current ? theme.text : theme.text.muted;
     const marker = options.current ? "• " : "  ";
     return box({
         width: "100%",
@@ -173,7 +172,7 @@ function routeRow(theme, route, options) {
             `${marker}${route.agent}`,
         ]),
         text({
-            fg: theme.textMuted,
+            fg: theme.text.muted,
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,
@@ -190,7 +189,7 @@ function emptyState(theme, routes, current, expanded) {
     if (routes.length === 0) {
         return [
             column({ width: "100%", marginTop: 1 }, [
-                text({ fg: theme.textMuted, wrapMode: "none" }, [
+                text({ fg: theme.text.muted, wrapMode: "none" }, [
                     "No routes published",
                 ]),
             ]),
@@ -200,7 +199,7 @@ function emptyState(theme, routes, current, expanded) {
         return [];
     return [
         column({ width: "100%", marginTop: 1 }, [
-            text({ fg: theme.textMuted, wrapMode: "none" }, [
+            text({ fg: theme.text.muted, wrapMode: "none" }, [
                 "Not on a routed model",
             ]),
         ]),

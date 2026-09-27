@@ -86,7 +86,6 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         {
           width: "100%",
           border: "rounded",
-          borderColor: theme.borderActive,
           padding: 1,
         },
         [
@@ -216,12 +215,12 @@ function header(
       alignItems: "center",
     },
     [
-      box({ paddingRight: 1, backgroundColor: theme.accent }, [
-        text({ fg: theme.background }, [
+      box({ paddingRight: 1, backgroundColor: theme.background.raised }, [
+        text({ fg: theme.text.base, fontWeight: "bold" }, [
           `${expanded ? "▼" : "▶"} Model Router (${count})`,
         ]),
       ]),
-      text({ fg: theme.textMuted, wrapMode: "none" }, [`v${version}`]),
+      text({ fg: theme.text.muted, wrapMode: "none" }, [`v${version}`]),
     ],
   );
 
@@ -233,7 +232,7 @@ function routeRow(
   route: Route,
   options: { current: boolean; variant?: string },
 ): Element {
-  const fg = options.current ? theme.text : theme.textMuted;
+  const fg = options.current ? theme.text : theme.text.muted;
   const marker = options.current ? "• " : "  ";
   return box(
     {
@@ -248,7 +247,7 @@ function routeRow(
       ]),
       text(
         {
-          fg: theme.textMuted,
+          fg: theme.text.muted,
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,
@@ -274,7 +273,7 @@ function emptyState(
   if (routes.length === 0) {
     return [
       column({ width: "100%", marginTop: 1 }, [
-        text({ fg: theme.textMuted, wrapMode: "none" }, [
+        text({ fg: theme.text.muted, wrapMode: "none" }, [
           "No routes published",
         ]),
       ]),
@@ -283,7 +282,7 @@ function emptyState(
   if (expanded || current) return [];
   return [
     column({ width: "100%", marginTop: 1 }, [
-      text({ fg: theme.textMuted, wrapMode: "none" }, [
+      text({ fg: theme.text.muted, wrapMode: "none" }, [
         "Not on a routed model",
       ]),
     ]),
