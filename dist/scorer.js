@@ -45,13 +45,16 @@ function categoryScore(model, req) {
         let value;
         switch (category) {
             case "fast":
-                value = latencyScore(model);
+                value = latencyScore(model) + (model.categories.has("fast") ? 0.5 : 0);
                 break;
             case "cheap":
                 value = costScore(model);
                 break;
             case "long-context":
                 value = contextScore(model, req);
+                break;
+            case "reasoning":
+                value = model.categories.has("fast") ? 0.5 : 1;
                 break;
             default:
                 value = model.categories.has(category) ? 1 : 0;

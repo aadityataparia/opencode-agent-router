@@ -53,13 +53,16 @@ function categoryScore(model: DiscoveredModel, req: AgentRequirements): number {
     let value: number;
     switch (category as ModelCategory) {
       case "fast":
-        value = latencyScore(model);
+        value = latencyScore(model) + (model.categories.has("fast") ? 0.5 : 0);
         break;
       case "cheap":
         value = costScore(model);
         break;
       case "long-context":
         value = contextScore(model, req);
+        break;
+      case "reasoning":
+        value = model.categories.has("fast") ? 0.5 : 1;
         break;
       default:
         value = model.categories.has(category as ModelCategory) ? 1 : 0;
