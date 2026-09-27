@@ -1,3 +1,4 @@
+import { scoreModel } from "./scorer";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -189,8 +190,8 @@ export function formatUsable(view) {
     }
     lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`);
     lines.push("");
-    lines.push("| model | health | latency |");
-    lines.push("| --- | --- | --- |");
+    lines.push("| model | health | score | latency |");
+    lines.push("| --- | --- | --- | --- |");
     for (const model of pool) {
         const latency = model.lastProbeAt === undefined
             ? "—"
@@ -200,7 +201,7 @@ export function formatUsable(view) {
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;
-        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${latency}${seen} |`);
+        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model).score.toFixed(2)} | ${latency}${seen} |`);
     }
     return lines.join("\n");
 }

@@ -1,3 +1,4 @@
+import { scoreModel } from "./scorer";
 import type { DiscoveredModel, RouterConfig } from "./types";
 
 /**
@@ -284,8 +285,8 @@ export function formatUsable(view: StatusView): string {
     `**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`,
   );
   lines.push("");
-  lines.push("| model | health | latency |");
-  lines.push("| --- | --- | --- |");
+  lines.push("| model | health | score | latency |");
+  lines.push("| --- | --- | --- | --- |");
 
   for (const model of pool) {
     const latency =
@@ -299,7 +300,7 @@ export function formatUsable(view: StatusView): string {
         ? ""
         : ` · ${model.successes} ok / ${model.failures} failed`;
     lines.push(
-      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${latency}${seen} |`,
+      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model).score.toFixed(2)} | ${latency}${seen} |`,
     );
   }
 

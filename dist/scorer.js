@@ -49,7 +49,7 @@ function capabilityScore(model, req) {
         ? 1
         : checks.filter(Boolean).length / checks.length;
 }
-const defaultReq = {
+export const DEFAULT_AGENT_REQ = {
     weights: {
         cheap: 0.4,
         fast: 0.4,
@@ -62,29 +62,32 @@ const defaultReq = {
 const yearsFromNow = (time = Date.now()) => {
     return (Date.now() - time) / (365 * 24 * 60 * 60 * 1000);
 };
+export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
+    const breakdown = {
+        category: categoryScore(model, req),
+        health: model.health,
+        latency: latencyScore(model),
+        cost: costScore(model),
+        context: contextScore(model, req),
+        capabilities: capabilityScore(model, req),
+    };
+    const score = breakdown.category +
+        req.latencyWeight * breakdown.latency +
+        req.costWeight * breakdown.cost +
+        req.contextWeight * breakdown.context +
+        yearsFromNow(model.releasedAt) * 0.2 +
+        0.1 * breakdown.capabilities;
+    return { score, breakdown };
+};
 export function findCandidates(agent, models, additionals, minHeadlth = 0) {
     const req = {
-        ...defaultReq,
+        ...DEFAULT_AGENT_REQ,
         ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
     };
     return models
         .filter((model) => model.health > minHeadlth && satisfies(model, req))
         .map((model) => {
-        const breakdown = {
-            category: categoryScore(model, req),
-            health: model.health,
-            latency: latencyScore(model),
-            cost: costScore(model),
-            context: contextScore(model, req),
-            capabilities: capabilityScore(model, req),
-        };
-        const score = breakdown.category +
-            req.latencyWeight * breakdown.latency +
-            req.costWeight * breakdown.cost +
-            req.contextWeight * breakdown.context +
-            yearsFromNow(model.releasedAt) * 0.2 +
-            0.1 * breakdown.capabilities;
-        return { model, score, breakdown };
+        return { model, ...scoreModel(model, req) };
     })
         .sort((a, b) => b.score - a.score);
 }
