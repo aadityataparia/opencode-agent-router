@@ -12,6 +12,7 @@ interface SelectedModel {
   readonly providerID: string;
   readonly id: string;
   readonly variant?: string;
+  readonly agent?: string;
 }
 
 interface Route {
@@ -64,13 +65,8 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     const build = (): Element => {
       const location = ctx.location ?? ctx.data.location.default();
       const selected = readSelection(ctx, location);
-      // The selection is a real model, so the current route is whichever routed
-      // agent currently points at it — not an agent whose id matches it.
-      const selectedRef = selected
-        ? `${selected.providerID}/${selected.id}`
-        : undefined;
-      const current = selectedRef
-        ? routes.find((route) => route.target === selectedRef)
+      const current = selected?.agent
+        ? routes.find((route) => route.agent === selected.agent)
         : undefined;
 
       const visible = expanded
@@ -326,16 +322,28 @@ function readSelection(
 ): SelectedModel | undefined {
   const route = ctx.ui.router.current();
   if (route.type === "session") {
+    const agent = ctx.data.session
+      .get(route.sessionID)
+      ?.agent?.replace(ROUTER_AGENT_PREFIX, "");
     const model = ctx.data.session.get(route.sessionID)?.model;
     return model
-      ? { providerID: model.providerID, id: model.id, variant: model.variant }
+      ? {
+          providerID: model.providerID,
+          id: model.id,
+          variant: model.variant,
+          agent,
+        }
       : undefined;
   }
 
   const agents = ctx.data.location.agent.list(location) ?? [];
   const primary = agents.find((agent) => agent.mode === "primary");
   if (!primary?.model) return undefined;
-  return { providerID: primary.model.providerID, id: primary.model.id };
+  return {
+    providerID: primary.model.providerID,
+    id: primary.model.id,
+    agent: primary.id,
+  };
 }
 
 /** Change detector for the poll loop, from the same reads `build` performs. */
