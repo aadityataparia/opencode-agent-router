@@ -48,7 +48,7 @@ function inputSupportsVision(model: any): boolean {
 }
 
 export function classifyModel(model: any): DiscoveredModel {
-  const text = [model?.providerID, model?.id, model?.name, model?.family]
+  const text = [model?.id, model?.family]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();

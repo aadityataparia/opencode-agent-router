@@ -43,7 +43,7 @@ function inputSupportsVision(model) {
     return ["image", "video", "pdf"].some((kind) => input.includes(kind));
 }
 export function classifyModel(model) {
-    const text = [model?.providerID, model?.id, model?.name, model?.family]
+    const text = [model?.id, model?.family]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
