@@ -502,7 +502,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         if (opts.session && ["pin", "unpin", "manual"].includes(reason)) {
           const curAgent = opts.session.agent?.replace("model-router/", "");
           const selectedModel = curAgent
-            ? assignments.get(curAgent as AgentName)
+            ? currentAssignments.get(curAgent as AgentName)
             : undefined;
           if (
             selectedModel &&
