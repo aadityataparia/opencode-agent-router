@@ -5,6 +5,8 @@ const COMMON_AGENTS = {
     // Master delegator and strategic coordinator.
 
     weights: {
+      cheap: 0.0,
+      fast: 0.05,
       reasoning: 1.0,
       coding: 0.8,
       "long-context": 0.9,
@@ -12,18 +14,14 @@ const COMMON_AGENTS = {
     },
 
     minContext: 100000,
-    reasoning: true,
     tools: true,
-
-    latencyWeight: 0.05,
-    costWeight: 0.0,
-    contextWeight: 0.2,
   },
   coder: {
     // Fast implementation specialist.
     // Receives concrete/bounded instructions from Orchestrator.
 
     weights: {
+      "long-context": 0.05,
       coding: 1.0,
       fast: 0.9,
       cheap: 0.8,
@@ -32,15 +30,12 @@ const COMMON_AGENTS = {
 
     minContext: 32000,
     tools: true,
-
-    latencyWeight: 0.3,
-    costWeight: 0.3,
-    contextWeight: 0.05,
   },
   vision: {
     // Optional visual-analysis specialist, for when the orchestrator is not multimodal.
 
     weights: {
+      cheap: 0.1,
       vision: 1.0,
       "long-context": 0.65,
       fast: 0.6,
@@ -48,12 +43,7 @@ const COMMON_AGENTS = {
     },
 
     minContext: 32000,
-    vision: true,
     tools: true,
-
-    latencyWeight: 0.15,
-    costWeight: 0.1,
-    contextWeight: 0.1,
   },
 } as const satisfies Record<string, AgentRequirements>;
 
@@ -62,90 +52,70 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
   hephaestus: {
     weights: { coding: 1.0, reasoning: 0.9, general: 0.4 },
     minContext: 64000,
-    reasoning: true,
     tools: true,
-    latencyWeight: 0.1,
-    costWeight: 0.05,
-    contextWeight: 0.1,
   },
   prometheus: {
     weights: { reasoning: 1.0, "long-context": 0.95, general: 0.3 },
     minContext: 100_000,
-    reasoning: true,
     tools: true,
-    latencyWeight: 0.05,
-    costWeight: 0.05,
-    contextWeight: 0.15,
   },
   atlas: {
     weights: { coding: 1.0, reasoning: 0.85, general: 0.4 },
     minContext: 64000,
-    reasoning: true,
     tools: true,
-    latencyWeight: 0.1,
-    costWeight: 0.05,
-    contextWeight: 0.1,
   },
   explore: {
     weights: { fast: 1.0, coding: 0.8, general: 0.4 },
     minContext: 32000,
     tools: true,
-    latencyWeight: 0.4,
-    costWeight: 0.2,
-    contextWeight: 0.05,
   },
   "multimodal-looker": {
-    weights: { vision: 1.0, reasoning: 0.7, general: 0.2 },
-    vision: true,
+    weights: {
+      vision: 1.0,
+      reasoning: 0.7,
+      general: 0.2,
+      fast: 0.1,
+      cheap: 0.05,
+      "long-context": 0.05,
+    },
     minContext: 32000,
     tools: true,
-    latencyWeight: 0.1,
-    costWeight: 0.05,
-    contextWeight: 0.05,
   },
   metis: {
     weights: { reasoning: 1.0, "long-context": 0.8, general: 0.3 },
     minContext: 100000,
-    reasoning: true,
     tools: true,
-    latencyWeight: 0.05,
-    costWeight: 0,
-    contextWeight: 0.15,
   },
   momus: {
     weights: { reasoning: 1.0, coding: 0.7, "long-context": 0.8 },
     minContext: 100000,
-    reasoning: true,
     tools: true,
-    latencyWeight: 0.05,
-    costWeight: 0,
-    contextWeight: 0.15,
   },
   councillor: {
     // A council member: reason well and dissent usefully, but unlike the
     // council it should not be the most expensive model available.
 
     weights: {
+      cheap: 0.1,
+      fast: 0.1,
       reasoning: 1.0,
       "long-context": 0.85,
       coding: 0.6,
     },
 
     minContext: 100000,
-    reasoning: true,
     tools: true,
-
-    latencyWeight: 0.1,
-    costWeight: 0.1,
-    contextWeight: 0.15,
   },
   "sisyphus-junior": {
-    weights: { coding: 0.8, fast: 1.0, cheap: 1.0, general: 0.4 },
+    weights: {
+      coding: 0.8,
+      fast: 1.0,
+      cheap: 1.0,
+      general: 0.4,
+      "long-context": 0.05,
+    },
     minContext: 32000,
     tools: true,
-    latencyWeight: 0.3,
-    costWeight: 0.4,
-    contextWeight: 0.05,
   },
   orchestrator: COMMON_AGENTS.architect,
 
@@ -154,6 +124,7 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     // Speed and efficiency matter more than maximum reasoning.
 
     weights: {
+      "long-context": 0.05,
       fast: 1.0,
       coding: 0.8,
       cheap: 0.9,
@@ -162,10 +133,6 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
 
     minContext: 100_000,
     tools: true,
-
-    latencyWeight: 0.45,
-    costWeight: 0.35,
-    contextWeight: 0.05,
   },
 
   oracle: {
@@ -179,12 +146,7 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     },
 
     minContext: 100000,
-    reasoning: true,
     tools: true,
-
-    latencyWeight: 0.02,
-    costWeight: 0.0,
-    contextWeight: 0.2,
   },
 
   council: {
@@ -192,18 +154,15 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     // synthesis model; its councillors are configured separately.
 
     weights: {
+      cheap: 0.0,
+      fast: 0.0,
       reasoning: 1.0,
       "long-context": 0.95,
       coding: 0.65,
     },
 
     minContext: 100000,
-    reasoning: true,
     tools: true,
-
-    latencyWeight: 0.0,
-    costWeight: 0.0,
-    contextWeight: 0.2,
   },
 
   librarian: {
@@ -211,6 +170,7 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     // Explicitly optimized for fast/low-cost models.
 
     weights: {
+      cheap: 0.35,
       fast: 1.0,
       "long-context": 0.75,
       reasoning: 0.55,
@@ -219,10 +179,6 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
 
     minContext: 64000,
     tools: true,
-
-    latencyWeight: 0.35,
-    costWeight: 0.35,
-    contextWeight: 0.1,
   },
 
   designer: {
@@ -230,6 +186,9 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     // reasoning; vision is a bonus, not a requirement.
 
     weights: {
+      "long-context": 0.1,
+      cheap: 0.05,
+      fast: 0.1,
       coding: 1.0,
       vision: 0.85,
       reasoning: 0.65,
@@ -240,9 +199,6 @@ export const AGENT_REQUIREMENTS: Record<AgentName, AgentRequirements> = {
     tools: true,
 
     // Deliberately not vision: a model can be excellent at UI without image input.
-    latencyWeight: 0.1,
-    costWeight: 0.05,
-    contextWeight: 0.1,
   },
   fixer: COMMON_AGENTS.coder,
   observer: COMMON_AGENTS.vision,

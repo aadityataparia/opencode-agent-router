@@ -104,35 +104,14 @@ export const OpenCodeAgentRouter = Plugin.define({
             let assigned = 0;
             let preserved = 0;
             const failed = [];
-            // Providers the catalog actually knows. An empty set (before the first
-            // discovery pass) makes every bare role look unproven, so it gets written
-            // — the same outcome as before this check existed.
-            const known = new Set(catalog.map((model) => model.providerID));
             for (const [agentName, ref] of assignedRefs) {
                 const model = {
                     providerID: Provider.ID.make(ref.providerID),
                     id: Model.ID.make(ref.modelID),
                 };
-                // Both ids get the model. `model-router/<role>` is the router's own
-                // agent, but a preset points the bare role at `model-router/<role>` as
-                // its *model*, and that model no longer exists — so dispatching the bare
-                // role failed with "Model unavailable" without the router ever being
-                // consulted. Setting the bare role here is what makes dispatch route.
                 for (const id of [routerAgentID(agentName), agentName]) {
-                    const isOurs = id !== agentName;
                     try {
-                        // `update` is an upsert: the id need not exist yet.
                         editor.update(id, (agent) => {
-                            // A bare role already on a real, known model was set on purpose —
-                            // a `/router pin`, or a hand-written preset. Leave it alone; the
-                            // router must not clobber a deliberate choice on every agent load.
-                            if (!isOurs) {
-                                const current = agent.model;
-                                if (current && known.has(String(current.providerID))) {
-                                    preserved += 1;
-                                    return;
-                                }
-                            }
                             agent.id = Agent.ID.make(id);
                             agent.name = Agent.Name.make(agentName);
                             agent.model = model;
@@ -409,6 +388,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 refreshMs: config.refreshMs,
                 now,
                 pool: usablePool(),
+                currentAgentReq: getAgentRequirements(agent, config.agents),
+                currentAgent: agent,
             });
         }
         /** The models a routing pass could pick from, best health first. */

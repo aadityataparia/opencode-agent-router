@@ -89,7 +89,7 @@ config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
     "agents": {
       "fast-coder": {
         "weights": {
-          // weight can be given to "reasoning", "coding" ,"fast", "vision", "long-context", "cheap"
+          // weight can be given to "reasoning", "coding", "fast", "long-context", "cheap", "general"
           "coding": 1.0,
           "fast": 0.9,
           "cheap": 0.8,
@@ -97,13 +97,7 @@ config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
         },
 
         "minContext": 32000,
-        "tools": true,
-        "vision": false,
-        "reasoning": false,
-
-        "latencyWeight": 0.3,
-        "costWeight": 0.3,
-        "contextWeight": 0.05
+        "tools": true // if true, agent should have tools capability
       }
     }
   }
@@ -121,45 +115,13 @@ A provider whose credentials are rejected is reported and its models are dropped
 from the running until it works again. A model that is merely throttled stays
 eligible.
 
-## The agent files
-
-The plugin creates one Markdown file per role and never overwrites a file that is
-already there, so you can edit them freely:
-
-```
-~/.config/opencode/agents/model-router/explorer.md
-```
-
-```md
----
-description: The explorer role, routed
-mode: subagent
----
-
-You are the `explorer` role.
-```
-
-- Do not add a `model:` line. A model set on the agent wins over the router and
-  opts that role out of routing.
-- `mode` is `subagent` for every role except `orchestrator`, which is `all` so it
-  can also run as a session's main agent.
-- The body is the agent's system prompt, and it replaces the provider's default
-  prompt. Delete the body to inherit the provider's.
-- A role you stop routing leaves a file behind. The plugin removes it only if it
-  is still exactly what the plugin wrote; anything you have edited is left for
-  you to delete.
-
 ## Troubleshooting
 
 **A routed agent has no model.** The agent file is missing, or the role is not
-under the detected preset. Check `/router` for the detected presets, and confirm
-`~/.config/opencode/agents/model-router/<role>.md` exists.
-
-**Nothing routes.** A role must point at `model-router/<role>`, and the plugin
-must know the role — see `presets` above.
+under the detected preset. Check `/router` for the detected presets.
 
 **A dispatched agent fails to start.** If the error mentions a variant, the model
 behind that role has no such variant; drop `variant` from the role's config.
 
 **A model looks right but is not used.** Run `/router refresh` to bypass the
-probe cache and cooldown, and check `/router` for a rejected credential.
+probe cache and cooldown, and check for a rejected credential.

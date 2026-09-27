@@ -10,21 +10,11 @@ import {
 
 function satisfies(model: DiscoveredModel, req: AgentRequirements): boolean {
   if (req.minContext && model.context < req.minContext) return false;
-  if (req.vision && !model.capabilities.vision) return false;
-  if (req.reasoning && !model.capabilities.reasoning) return false;
+  if ((req.weights.vision ?? 0) > 0 && !model.capabilities.vision) return false;
+  if ((req.weights.reasoning ?? 0) > 0 && !model.capabilities.reasoning)
+    return false;
   if (req.tools && !model.capabilities.tools) return false;
   return true;
-}
-
-function categoryScore(model: DiscoveredModel, req: AgentRequirements): number {
-  let score = 0;
-  let maxWeight = 0;
-  for (const [category, weight] of Object.entries(req.weights)) {
-    if (!MODEL_CATEGORIES.includes(category as ModelCategory)) continue;
-    if (model.categories.has(category as ModelCategory)) score += weight;
-    maxWeight += weight;
-  }
-  return maxWeight === 0 ? 0 : score / maxWeight;
 }
 
 function latencyScore(model: DiscoveredModel): number {
@@ -38,8 +28,46 @@ function costScore(model: DiscoveredModel): number {
 }
 
 function contextScore(model: DiscoveredModel, req: AgentRequirements): number {
-  if (!req.minContext) return 1;
+  if (!req.minContext) {
+    // No bar to measure against, so fall back to the tag rather than grading
+    // every model identically.
+    return model.categories.has("long-context") ? 1 : 0.5;
+  }
   return Math.min(model.context / req.minContext, 2) / 2;
+}
+
+/**
+ * Three categories are measured signals rather than model tags: they score the
+ * model continuously instead of asking whether it carries the tag. A model
+ * labelled `fast` is not necessarily fast, so the tag is the weaker signal and
+ * the measurement wins.
+ */
+function categoryScore(model: DiscoveredModel, req: AgentRequirements): number {
+  let score = 0;
+  let maxWeight = 0;
+  // general fallback
+  req.weights.general = req.weights.general ?? 0.1;
+
+  for (const [category, weight] of Object.entries(req.weights)) {
+    if (!MODEL_CATEGORIES.includes(category as ModelCategory)) continue;
+    let value: number;
+    switch (category as ModelCategory) {
+      case "fast":
+        value = latencyScore(model);
+        break;
+      case "cheap":
+        value = costScore(model);
+        break;
+      case "long-context":
+        value = contextScore(model, req);
+        break;
+      default:
+        value = model.categories.has(category as ModelCategory) ? 1 : 0;
+    }
+    score += weight * value;
+    maxWeight += weight;
+  }
+  return maxWeight === 0 ? 0 : score / maxWeight;
 }
 
 function capabilityScore(
@@ -47,10 +75,6 @@ function capabilityScore(
   req: AgentRequirements,
 ): number {
   const checks = [
-    req.vision == null ? null : model.capabilities.vision === req.vision,
-    req.reasoning == null
-      ? null
-      : model.capabilities.reasoning === req.reasoning,
     req.tools == null ? null : model.capabilities.tools === req.tools,
   ].filter((x): x is boolean => x !== null);
 
@@ -66,9 +90,6 @@ export const DEFAULT_AGENT_REQ: AgentRequirements = {
     fast: 0.5,
     cheap: 0.5,
   },
-  latencyWeight: 0.1,
-  costWeight: 0.5,
-  contextWeight: 0.5,
 };
 
 const yearsFromNow = (time: number = Date.now()): number => {
@@ -98,11 +119,11 @@ export const scoreModel = (
     capabilities: capabilityScore(model, req),
   };
 
+  // Latency, cost and context already sit inside `breakdown.category` via the
+  // fast / cheap / long-context weights, so adding them again would count them
+  // twice and let them outweigh the categories they are meant to inform.
   const score =
     breakdown.category +
-    req.latencyWeight * breakdown.latency +
-    req.costWeight * breakdown.cost +
-    req.contextWeight * breakdown.context +
     yearsFromNow(model.releasedAt) * 0.2 +
     0.1 * breakdown.capabilities;
   return { score, breakdown };

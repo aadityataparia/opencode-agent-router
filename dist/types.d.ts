@@ -50,15 +50,9 @@ export interface DiscoveredModel {
     releasedAt?: number;
 }
 export interface AgentRequirements {
-    /** Category -> how much a model in that category is worth to this role. */
     weights: Partial<Record<ModelCategory, number>>;
     minContext?: number;
-    vision?: boolean;
-    reasoning?: boolean;
     tools?: boolean;
-    latencyWeight: number;
-    costWeight: number;
-    contextWeight: number;
 }
 export interface Candidate {
     model: DiscoveredModel;
