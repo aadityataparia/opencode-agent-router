@@ -59,6 +59,9 @@ const defaultReq = {
     costWeight: 1,
     contextWeight: 0.7,
 };
+const yearsFromNow = (time = Date.now()) => {
+    return (Date.now() - time) / (365 * 24 * 60 * 60 * 1000);
+};
 export function findCandidates(agent, models, additionals, minHeadlth = 0) {
     const req = {
         ...defaultReq,
@@ -79,7 +82,7 @@ export function findCandidates(agent, models, additionals, minHeadlth = 0) {
             req.latencyWeight * breakdown.latency +
             req.costWeight * breakdown.cost +
             req.contextWeight * breakdown.context +
-            ((model.releasedAt ?? Date.now()) / Date.now()) * 0.2 +
+            yearsFromNow(model.releasedAt) * 0.2 +
             0.1 * breakdown.capabilities;
         return { model, score, breakdown };
     })
