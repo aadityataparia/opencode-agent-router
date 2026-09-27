@@ -104,6 +104,7 @@ export interface DiscoveredModel {
   cooldownUntil?: number;
   /** When this model was last pinged; drives the probe re-check interval. */
   lastProbeAt?: number;
+  releasedAt?: number;
 }
 
 export interface AgentRequirements {

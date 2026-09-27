@@ -47,6 +47,7 @@ export interface DiscoveredModel {
     cooldownUntil?: number;
     /** When this model was last pinged; drives the probe re-check interval. */
     lastProbeAt?: number;
+    releasedAt?: number;
 }
 export interface AgentRequirements {
     /** Category -> how much a model in that category is worth to this role. */

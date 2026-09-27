@@ -79,6 +79,7 @@ export function findCandidates(agent, models, additionals, minHeadlth = 0) {
             req.latencyWeight * breakdown.latency +
             req.costWeight * breakdown.cost +
             req.contextWeight * breakdown.context +
+            ((model.releasedAt ?? Date.now()) / Date.now()) * 0.2 +
             0.1 * breakdown.capabilities;
         return { model, score, breakdown };
     })

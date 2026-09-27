@@ -1,3 +1,4 @@
+import { Model } from "@opencode/plugin";
 import type { DiscoveredModel, ModelCategory } from "./types";
 
 const CODING = [
@@ -95,5 +96,6 @@ export function classifyModel(model: any): DiscoveredModel {
     latencyMs: Infinity,
     failures: 0,
     successes: 0,
+    releasedAt: (model as Model.Info).time.released,
   };
 }

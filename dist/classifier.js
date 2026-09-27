@@ -88,5 +88,6 @@ export function classifyModel(model) {
         latencyMs: Infinity,
         failures: 0,
         successes: 0,
+        releasedAt: model.time.released,
     };
 }
