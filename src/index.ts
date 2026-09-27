@@ -442,7 +442,10 @@ export const OpenCodeAgentRouter = Plugin.define({
 
     async function applyRouting(
       reason: string,
-      opts: { force?: boolean } = {},
+      opts: {
+        force?: boolean;
+        session?: Awaited<ReturnType<(typeof ctx)["session"]["get"]>>;
+      } = {},
     ): Promise<RefreshOutcome> {
       if (refreshing) return { status: "busy" };
       refreshing = true;
@@ -496,11 +499,21 @@ export const OpenCodeAgentRouter = Plugin.define({
         await ctx.agent.reload();
         lastAssignments = signature;
 
-        for (const [agent, { model }] of assignments) {
-          log(
-            config.log,
-            `${routerAgentID(agent)} -> ${model.providerID}/${model.modelID ?? model.id}`,
-          );
+        if (opts.session && ["pin", "unpin"].includes(reason)) {
+          const curAgent = opts.session.agent?.replace("model-router/", "");
+          const selectedModel = curAgent && assignedRefs.get(curAgent);
+          if (
+            selectedModel &&
+            opts.session.model?.id !== selectedModel.modelID
+          ) {
+            await ctx.session.switchModel({
+              sessionID: opts.session?.id,
+              model: {
+                id: selectedModel.modelID,
+                providerID: selectedModel.providerID,
+              },
+            });
+          }
         }
         return { status: "changed", assignments: assignments.size };
       } catch (error) {
@@ -673,12 +686,7 @@ ${text}
           // No reachability check: a model the router can list, the agent can run.
           pins.set(parsed.agent, modelRef(target));
           const outcome = await applyRouting("pin");
-          if (curSession.agent?.replace("model-router/", "") === parsed.agent) {
-            await ctx.session.switchModel({
-              sessionID,
-              model: target,
-            });
-          }
+
           await say(
             outcome.status === "failed"
               ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
