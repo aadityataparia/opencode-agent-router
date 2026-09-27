@@ -612,7 +612,7 @@ ${text}
 
         case "usable":
           await say(
-            renderUsable(curSession?.agent?.replace("model-router/", "")),
+            renderUsable(curSession.agent?.replace("model-router/", "")),
           );
           return;
 
@@ -673,6 +673,12 @@ ${text}
           // No reachability check: a model the router can list, the agent can run.
           pins.set(parsed.agent, modelRef(target));
           const outcome = await applyRouting("pin");
+          if (curSession.agent?.replace("model-router/", "") === parsed.agent) {
+            await ctx.session.switchModel({
+              sessionID,
+              model: target,
+            });
+          }
           await say(
             outcome.status === "failed"
               ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
