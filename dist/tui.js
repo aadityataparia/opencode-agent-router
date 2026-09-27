@@ -58,7 +58,6 @@ export const OpenCodeAgentRouterTui = Plugin.define({
             return column({
                 width: "100%",
                 border: "rounded",
-                padding: 1,
             }, [
                 header(theme, readVersion(), expanded, routes.length, () => {
                     expanded = !expanded;
