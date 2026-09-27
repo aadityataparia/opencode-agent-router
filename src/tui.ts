@@ -241,9 +241,7 @@ function routeRow(
   route: Route,
   options: { current: boolean; variant?: string },
 ): Element {
-  const fg = options.current
-    ? theme.background.feedback.success
-    : theme.text.base;
+  const fg = options.current ? theme.text.feedback.success : theme.text.base;
   const marker = options.current ? "• " : "  ";
   return box(
     {

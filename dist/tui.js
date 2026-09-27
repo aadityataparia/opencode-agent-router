@@ -160,9 +160,7 @@ function header(theme, version, expanded, count, onToggle) {
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
-    const fg = options.current
-        ? theme.background.feedback.success
-        : theme.text.base;
+    const fg = options.current ? theme.text.feedback.success : theme.text.base;
     const marker = options.current ? "• " : "  ";
     return box({
         width: "100%",
