@@ -468,9 +468,11 @@ ${text}
                     const probeNote = config.probe
                         ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
                         : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
-                    await say(outcome.status === "changed"
-                        ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
-                        : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`);
+                    await say(renderStatus() +
+                        "\n\n" +
+                        (outcome.status === "changed"
+                            ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
+                            : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`));
                     return;
                 }
                 case "pin": {

@@ -69,7 +69,10 @@ export const OpenCodeAgentRouter = Plugin.define({
      * reaches the status table pretending to be a catalog model with real health.
      */
     const STORAGE_KEY = "assignments";
-    const assignedRefs = new Map<string, { providerID: string; modelID: string }>();
+    const assignedRefs = new Map<
+      string,
+      { providerID: string; modelID: string }
+    >();
 
     async function loadAssignments(): Promise<void> {
       try {
@@ -86,7 +89,10 @@ export const OpenCodeAgentRouter = Plugin.define({
           });
         }
         if (assignedRefs.size > 0) {
-          log(config.log, `restored ${assignedRefs.size} assignment(s) from storage`);
+          log(
+            config.log,
+            `restored ${assignedRefs.size} assignment(s) from storage`,
+          );
         }
       } catch (error) {
         log(config.log, `could not read stored assignments: ${String(error)}`);
@@ -97,7 +103,8 @@ export const OpenCodeAgentRouter = Plugin.define({
       assignments: ReadonlyMap<AgentName, DiscoveredModel>,
     ): Promise<void> {
       try {
-        const payload: Record<string, { providerID: string; modelID: string }> = {};
+        const payload: Record<string, { providerID: string; modelID: string }> =
+          {};
         for (const [agent, model] of assignments) {
           const modelID = model.modelID ?? model.id;
           payload[agent] = { providerID: model.providerID, modelID };
@@ -536,7 +543,8 @@ export const OpenCodeAgentRouter = Plugin.define({
     /** The models a routing pass could pick from, best health first. */
     function usablePool(): DiscoveredModel[] {
       return catalog.filter(
-        (model) => !health.isCoolingDown(model) && model.health >= config.minHealth,
+        (model) =>
+          !health.isCoolingDown(model) && model.health >= config.minHealth,
       );
     }
 
@@ -623,9 +631,11 @@ ${text}
             ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
             : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
           await say(
-            outcome.status === "changed"
-              ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
-              : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`,
+            renderStatus() +
+              "\n\n" +
+              (outcome.status === "changed"
+                ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
+                : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`),
           );
           return;
         }
