@@ -263,7 +263,7 @@ function routeRow(
           textAlign: "right",
         },
         [
-          "↳ " +
+          "  ↳ " +
             (options.variant
               ? `${route.target} (${options.variant})`
               : route.target),

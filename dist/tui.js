@@ -178,7 +178,7 @@ function routeRow(theme, route, options) {
             flexShrink: 1,
             textAlign: "right",
         }, [
-            "↳ " +
+            "  ↳ " +
                 (options.variant
                     ? `${route.target} (${options.variant})`
                     : route.target),
