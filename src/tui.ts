@@ -248,7 +248,7 @@ function routeRow(
       ]),
       text(
         {
-          fg: theme,
+          fg: theme.textMuted,
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,

@@ -173,7 +173,7 @@ function routeRow(theme, route, options) {
             `${marker}${route.agent}`,
         ]),
         text({
-            fg: theme,
+            fg: theme.textMuted,
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,
