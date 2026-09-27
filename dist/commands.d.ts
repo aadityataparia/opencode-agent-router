@@ -1,4 +1,4 @@
-import type { DiscoveredModel, RouterConfig } from "./types";
+import type { AgentRequirements, Candidate, DiscoveredModel, RouterConfig } from "./types";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -40,11 +40,12 @@ export declare function countMatches(models: readonly DiscoveredModel[], ref: st
 export interface StatusView {
     config: RouterConfig;
     /** Agent -> chosen model for the routed agents currently published. */
-    assignments: ReadonlyMap<string, DiscoveredModel>;
+    assignments: ReadonlyMap<string, Candidate>;
     /** Agent -> pinned model ref. */
     pins: ReadonlyMap<string, string>;
     /** Agents eligible for routing under the active presets. */
     routedAgents: readonly string[];
+    currentAgent?: AgentRequirements;
     discovered: number;
     /** Models left in the pool after probing. */
     routable: number;

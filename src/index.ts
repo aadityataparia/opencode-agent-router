@@ -14,10 +14,11 @@ import {
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
-import { findCandidates } from "./scorer";
+import { findCandidates, getAgentRequirements } from "./scorer";
 import { Router } from "./router";
 import {
   AGENT_NAMES,
+  Candidate,
   routerAgentID,
   type AgentName,
   type DiscoveredModel,
@@ -54,7 +55,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     // Snapshot for the `/router` command. Held in setup scope rather than inside
     // a refresh pass so the command can report what is actually published.
     let catalog: DiscoveredModel[] = [];
-    let currentAssignments = new Map<AgentName, DiscoveredModel>();
+    let currentAssignments = new Map<AgentName, Candidate>();
 
     /**
      * The last decided mapping, kept in the plugin's durable store.
@@ -100,12 +101,12 @@ export const OpenCodeAgentRouter = Plugin.define({
     }
 
     async function saveAssignments(
-      assignments: ReadonlyMap<AgentName, DiscoveredModel>,
+      assignments: ReadonlyMap<AgentName, Candidate>,
     ): Promise<void> {
       try {
         const payload: Record<string, { providerID: string; modelID: string }> =
           {};
-        for (const [agent, model] of assignments) {
+        for (const [agent, { model }] of assignments) {
           const modelID = model.modelID ?? model.id;
           payload[agent] = { providerID: model.providerID, modelID };
           assignedRefs.set(agent, { providerID: model.providerID, modelID });
@@ -385,8 +386,8 @@ export const OpenCodeAgentRouter = Plugin.define({
     async function computeAssignments(
       models: DiscoveredModel[],
       fullCatalog: DiscoveredModel[],
-    ): Promise<Map<AgentName, DiscoveredModel>> {
-      const assignments = new Map<AgentName, DiscoveredModel>();
+    ): Promise<Map<AgentName, Candidate>> {
+      const assignments = new Map<AgentName, Candidate>();
       const userDefinedAgents = config.agents;
       const presetAgents = new Set(presetAgentNames(config.presets));
       const routedAgents = routedAgentNames();
@@ -413,7 +414,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         }
 
         const chosen = router.choose(agentName, candidates, config.strategy);
-        if (chosen) assignments.set(agentName, chosen.model);
+        if (chosen) assignments.set(agentName, chosen);
       }
 
       // Pins win over routing and resolve against the full catalog, not the
@@ -432,7 +433,18 @@ export const OpenCodeAgentRouter = Plugin.define({
           log(config.log, `pin ignored: ${ref} is not in the catalog`);
           continue;
         }
-        assignments.set(agent as AgentName, target);
+        assignments.set(agent as AgentName, {
+          model: target,
+          score: 0,
+          breakdown: {
+            category: 0,
+            health: 0,
+            latency: 0,
+            cost: 0,
+            context: 0,
+            capabilities: 0,
+          },
+        });
       }
 
       return assignments;
@@ -470,7 +482,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         syncRoutedAgents(
           routedAgentNames(),
           new Map(
-            [...assignments].map(([agent, model]) => [
+            [...assignments].map(([agent, { model }]) => [
               agent,
               `${model.providerID}/${model.modelID ?? model.id}`,
             ]),
@@ -489,7 +501,7 @@ export const OpenCodeAgentRouter = Plugin.define({
 
         const signature = [...assignments.entries()]
           .map(
-            ([agent, model]) =>
+            ([agent, { model }]) =>
               `${agent}=${model.providerID}/${model.modelID ?? model.id}`,
           )
           .join(",");
@@ -502,7 +514,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         await ctx.agent.reload();
         lastAssignments = signature;
 
-        for (const [agent, model] of assignments) {
+        for (const [agent, { model }] of assignments) {
           log(
             config.log,
             `${routerAgentID(agent)} -> ${model.providerID}/${model.modelID ?? model.id}`,
@@ -517,7 +529,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       }
     }
 
-    function renderStatus(): string {
+    function renderStatus(agent?: string): string {
       const now = Date.now();
       return formatStatus({
         config,
@@ -546,7 +558,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       );
     }
 
-    function renderUsable(): string {
+    function renderUsable(agent?: string): string {
       return formatUsable({
         config,
         assignments: currentAssignments,
@@ -563,6 +575,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         lastRun,
         refreshMs: config.refreshMs,
         now: Date.now(),
+        currentAgent: getAgentRequirements(agent as AgentName, config.agents),
       });
     }
 
@@ -573,6 +586,10 @@ export const OpenCodeAgentRouter = Plugin.define({
       sessionID: string;
       prompt: { text: string };
     }): Promise<void> => {
+      const curSession = await ctx.session.get({
+        sessionID,
+      });
+
       const say = async (text: string) => {
         try {
           await ctx.session.synthetic({

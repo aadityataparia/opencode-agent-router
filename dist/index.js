@@ -5,7 +5,7 @@ import { countMatches, findModel, formatStatus, formatUsable, HELP_TEXT, modelRe
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
-import { findCandidates } from "./scorer";
+import { findCandidates, getAgentRequirements } from "./scorer";
 import { Router } from "./router";
 import { AGENT_NAMES, routerAgentID, } from "./types";
 import { Agent, Model, Plugin, Provider } from "@opencode/plugin";
@@ -79,7 +79,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         async function saveAssignments(assignments) {
             try {
                 const payload = {};
-                for (const [agent, model] of assignments) {
+                for (const [agent, { model }] of assignments) {
                     const modelID = model.modelID ?? model.id;
                     payload[agent] = { providerID: model.providerID, modelID };
                     assignedRefs.set(agent, { providerID: model.providerID, modelID });
@@ -307,7 +307,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 }
                 const chosen = router.choose(agentName, candidates, config.strategy);
                 if (chosen)
-                    assignments.set(agentName, chosen.model);
+                    assignments.set(agentName, chosen);
             }
             // Pins win over routing and resolve against the full catalog, not the
             // probed pool, so a momentarily unhealthy pinned model is still honoured.
@@ -322,7 +322,18 @@ export const OpenCodeAgentRouter = Plugin.define({
                     log(config.log, `pin ignored: ${ref} is not in the catalog`);
                     continue;
                 }
-                assignments.set(agent, target);
+                assignments.set(agent, {
+                    model: target,
+                    score: 0,
+                    breakdown: {
+                        category: 0,
+                        health: 0,
+                        latency: 0,
+                        cost: 0,
+                        context: 0,
+                        capabilities: 0,
+                    },
+                });
             }
             return assignments;
         }
@@ -343,7 +354,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 currentAssignments = assignments;
                 // The agent files carry the model for the next cold start, so they are
                 // rewritten whenever routing moves one.
-                syncRoutedAgents(routedAgentNames(), new Map([...assignments].map(([agent, model]) => [
+                syncRoutedAgents(routedAgentNames(), new Map([...assignments].map(([agent, { model }]) => [
                     agent,
                     `${model.providerID}/${model.modelID ?? model.id}`,
                 ])), (message) => log(config.log, message));
@@ -357,7 +368,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                     usable: probed.usable,
                 };
                 const signature = [...assignments.entries()]
-                    .map(([agent, model]) => `${agent}=${model.providerID}/${model.modelID ?? model.id}`)
+                    .map(([agent, { model }]) => `${agent}=${model.providerID}/${model.modelID ?? model.id}`)
                     .join(",");
                 if (signature === lastAssignments) {
                     log(config.log, "no routing changes; skipping provider refresh");
@@ -366,7 +377,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 // Reloading replays the transform against this pass's assignments.
                 await ctx.agent.reload();
                 lastAssignments = signature;
-                for (const [agent, model] of assignments) {
+                for (const [agent, { model }] of assignments) {
                     log(config.log, `${routerAgentID(agent)} -> ${model.providerID}/${model.modelID ?? model.id}`);
                 }
                 return { status: "changed", assignments: assignments.size };
@@ -379,7 +390,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 refreshing = false;
             }
         }
-        function renderStatus() {
+        function renderStatus(agent) {
             const now = Date.now();
             return formatStatus({
                 config,
@@ -401,7 +412,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         function usablePool() {
             return catalog.filter((model) => !health.isCoolingDown(model) && model.health >= config.minHealth);
         }
-        function renderUsable() {
+        function renderUsable(agent) {
             return formatUsable({
                 config,
                 assignments: currentAssignments,
@@ -416,9 +427,13 @@ export const OpenCodeAgentRouter = Plugin.define({
                 lastRun,
                 refreshMs: config.refreshMs,
                 now: Date.now(),
+                currentAgent: getAgentRequirements(agent, config.agents),
             });
         }
         const execute = async ({ sessionID, prompt, }) => {
+            const curSession = await ctx.session.get({
+                sessionID,
+            });
             const say = async (text) => {
                 try {
                     await ctx.session.synthetic({

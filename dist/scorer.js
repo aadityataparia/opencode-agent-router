@@ -51,16 +51,23 @@ function capabilityScore(model, req) {
 }
 export const DEFAULT_AGENT_REQ = {
     weights: {
-        cheap: 0.4,
-        fast: 0.4,
-        general: 0.1,
+        "long-context": 0.5,
+        reasoning: 0.5,
+        fast: 0.5,
+        cheap: 0.5,
     },
-    latencyWeight: 1,
-    costWeight: 1,
-    contextWeight: 0.7,
+    latencyWeight: 0.1,
+    costWeight: 0.5,
+    contextWeight: 0.5,
 };
 const yearsFromNow = (time = Date.now()) => {
     return (Date.now() - time) / (365 * 24 * 60 * 60 * 1000);
+};
+export const getAgentRequirements = (agent, additionals = {}) => {
+    return {
+        ...DEFAULT_AGENT_REQ,
+        ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
+    };
 };
 export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
     const breakdown = {
@@ -80,10 +87,7 @@ export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
     return { score, breakdown };
 };
 export function findCandidates(agent, models, additionals, minHeadlth = 0) {
-    const req = {
-        ...DEFAULT_AGENT_REQ,
-        ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
-    };
+    const req = getAgentRequirements(agent, additionals);
     return models
         .filter((model) => model.health > minHeadlth && satisfies(model, req))
         .map((model) => {

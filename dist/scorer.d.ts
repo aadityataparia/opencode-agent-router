@@ -1,5 +1,6 @@
 import { type AgentName, type Candidate, type DiscoveredModel, type AgentRequirements } from "./types";
 export declare const DEFAULT_AGENT_REQ: AgentRequirements;
+export declare const getAgentRequirements: (agent: AgentName, additionals?: Record<string, AgentRequirements>) => AgentRequirements;
 export declare const scoreModel: (model: DiscoveredModel, req?: AgentRequirements) => {
     score: number;
     breakdown: Candidate["breakdown"];

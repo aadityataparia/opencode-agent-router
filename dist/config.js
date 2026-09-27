@@ -143,12 +143,12 @@ export function loadConfig(options = {}, log = false) {
     const configured = resolve.presets("presets");
     const presets = configured ?? detectPresets();
     const config = {
-        refreshMs: resolve.positiveNumber("refreshMs", 60_000),
+        refreshMs: resolve.positiveNumber("refreshMs", 5 * 60_000),
         maxFallbacks: Math.max(1, Math.floor(resolve.positiveNumber("maxFallbacks", 5))),
         probe: resolve.boolean("probe", false),
         probeTimeoutMs: resolve.positiveNumber("probeTimeoutMs", 8_000),
         strategy: resolve.strategy("strategy", "adaptive"),
-        minHealth: resolve.clampedNumber("minHealth", 0.2, 0, 1),
+        minHealth: resolve.clampedNumber("minHealth", 0.5, 0, 1),
         log: verbose,
         presets,
         agents: resolve.agents("agents"),
