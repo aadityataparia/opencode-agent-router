@@ -421,6 +421,17 @@ export const OpenCodeAgentRouter = Plugin.define({
                 now: Date.now(),
             });
         }
+        ctx.session.hook("context", async (input) => {
+            input.messages.push({
+                role: "tool",
+                content: [
+                    {
+                        type: "text",
+                        text: `The model router is active. Use \`/router help\` for commands.`,
+                    },
+                ],
+            });
+        });
         const execute = async ({ sessionID, prompt, }) => {
             // A failed reply must not surface as an unhandled rejection inside the
             // host's command dispatch; the router state change already happened.

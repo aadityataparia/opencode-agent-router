@@ -21,21 +21,12 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     setup: (ctx) => {
         const theme = ctx.theme;
         trace(`setup version=${readVersion()}`);
-        // Collapsed by default: the one route that matters right now. Expanding is
-        // an explicit act, so the sidebar stays quiet during normal work.
         let expanded = false;
         let disposed = false;
         let disposeSlot;
-        // The agent list is fetched over `ctx.client` rather than read from
-        // `ctx.data.location.agent`: that collection is scoped to a location and does
-        // not carry the routed agents, so the panel saw none. `agent.list()` is where
-        // the transform's assignment lands, so it is the authoritative answer.
         let routes = [];
         const refreshRoutes = async () => {
             try {
-                // No `location`: passing one scopes the result to that directory and
-                // drops the globally-defined routed agents, which is what the panel was
-                // seeing — an empty list from a call that succeeded.
                 const result = await ctx.client.agent.list({});
                 const agents = result.data ?? [];
                 routes = toRoutes(agents);

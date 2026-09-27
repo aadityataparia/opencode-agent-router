@@ -568,6 +568,18 @@ export const OpenCodeAgentRouter = Plugin.define({
       });
     }
 
+    ctx.session.hook("context", async (input) => {
+      input.messages.push({
+        role: "tool",
+        content: [
+          {
+            type: "text",
+            text: `The model router is active. Use \`/router help\` for commands.`,
+          },
+        ],
+      });
+    });
+
     const execute = async ({
       sessionID,
       prompt,
