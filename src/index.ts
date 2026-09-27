@@ -499,18 +499,20 @@ export const OpenCodeAgentRouter = Plugin.define({
         await ctx.agent.reload();
         lastAssignments = signature;
 
-        if (opts.session && ["pin", "unpin"].includes(reason)) {
+        if (opts.session && ["pin", "unpin", "manual"].includes(reason)) {
           const curAgent = opts.session.agent?.replace("model-router/", "");
-          const selectedModel = curAgent && assignedRefs.get(curAgent);
+          const selectedModel = curAgent
+            ? assignments.get(curAgent as AgentName)
+            : undefined;
           if (
             selectedModel &&
-            opts.session.model?.id !== selectedModel.modelID
+            opts.session.model?.id !== selectedModel.model.id
           ) {
             await ctx.session.switchModel({
-              sessionID: opts.session?.id,
+              sessionID: opts.session.id,
               model: {
-                id: selectedModel.modelID,
-                providerID: selectedModel.providerID,
+                id: selectedModel.model.id,
+                providerID: selectedModel.model.providerID,
               },
             });
           }
