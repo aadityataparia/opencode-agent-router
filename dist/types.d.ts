@@ -14,8 +14,9 @@ declare const BASIC_AGENTS: readonly ["coder", "architect", "visual"];
 type BasicAgentName = (typeof BASIC_AGENTS)[number];
 export declare const AGENT_NAMES: readonly ["sisyphus", "hephaestus", "prometheus", "atlas", "oracle", "librarian", "explore", "multimodal-looker", "metis", "momus", "sisyphus-junior", "orchestrator", "explorer", "oracle", "council", "councillor", "librarian", "designer", "fixer", "observer", "coder", "architect", "visual"];
 export type AgentName = OMOAgentName | SlimAgentName | BasicAgentName;
-export type ModelCategory = "reasoning" | "coding" | "fast" | "vision" | "long-context" | "cheap" | "general";
-export type RoutingStrategy = "priority" | "round-robin" | "weighted" | "latency" | "rate" | "adaptive";
+export declare const MODEL_CATEGORIES: readonly ["reasoning", "coding", "fast", "vision", "long-context", "cheap", "general"];
+export type ModelCategory = (typeof MODEL_CATEGORIES)[number];
+export type RoutingStrategy = "round-robin" | "weighted" | "latency" | "cost" | "adaptive";
 export interface ModelCapabilities {
     reasoning: boolean;
     vision: boolean;
@@ -48,14 +49,13 @@ export interface DiscoveredModel {
     lastProbeAt?: number;
 }
 export interface AgentRequirements {
-    categories: ModelCategory[];
+    /** Category -> how much a model in that category is worth to this role. */
     weights: Partial<Record<ModelCategory, number>>;
     minContext?: number;
     vision?: boolean;
     reasoning?: boolean;
     tools?: boolean;
     latencyWeight: number;
-    healthWeight: number;
     costWeight: number;
     contextWeight: number;
 }

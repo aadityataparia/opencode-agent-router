@@ -8,5 +8,4 @@ export declare class Router {
     private roundRobin;
     private weighted;
     private normalizedLatency;
-    private adaptive;
 }

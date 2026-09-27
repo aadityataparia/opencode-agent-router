@@ -53,17 +53,19 @@ export const AGENT_NAMES = [
 
 export type AgentName = OMOAgentName | SlimAgentName | BasicAgentName;
 
-export type ModelCategory =
-  | "reasoning"
-  | "coding"
-  | "fast"
-  | "vision"
-  | "long-context"
-  | "cheap"
-  | "general";
+export const MODEL_CATEGORIES = [
+  "reasoning",
+  "coding",
+  "fast",
+  "vision",
+  "long-context",
+  "cheap",
+  "general",
+] as const;
+
+export type ModelCategory = (typeof MODEL_CATEGORIES)[number];
 
 export type RoutingStrategy =
-  | "priority"
   | "round-robin"
   | "weighted"
   | "latency"
@@ -105,14 +107,13 @@ export interface DiscoveredModel {
 }
 
 export interface AgentRequirements {
-  categories: ModelCategory[];
+  /** Category -> how much a model in that category is worth to this role. */
   weights: Partial<Record<ModelCategory, number>>;
   minContext?: number;
   vision?: boolean;
   reasoning?: boolean;
   tools?: boolean;
   latencyWeight: number;
-  healthWeight: number;
   costWeight: number;
   contextWeight: number;
 }

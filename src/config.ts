@@ -1,4 +1,9 @@
-import { detectPresets, isPresetName, PRESET_NAMES, type PresetName } from "./presets";
+import {
+  detectPresets,
+  isPresetName,
+  PRESET_NAMES,
+  type PresetName,
+} from "./presets";
 import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
 
 /**
@@ -12,11 +17,10 @@ import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
 export type PluginOptions = Readonly<Record<string, unknown>>;
 
 const strategies: Set<RoutingStrategy> = new Set([
-  "priority",
   "round-robin",
   "weighted",
   "latency",
-  "rate",
+  "cost",
   "adaptive",
 ]);
 
@@ -66,9 +70,12 @@ class Resolver {
     const { value, source } = this.raw(key);
     if (value === undefined) return fallback;
 
-    const parsed = typeof value === "number" ? value : Number(String(value).trim());
+    const parsed =
+      typeof value === "number" ? value : Number(String(value).trim());
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
+      warn(
+        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
+      );
       return fallback;
     }
 
@@ -77,13 +84,21 @@ class Resolver {
   }
 
   /** A number clamped into range, for values where 0 is legitimate. */
-  clampedNumber(key: string, fallback: number, min: number, max: number): number {
+  clampedNumber(
+    key: string,
+    fallback: number,
+    min: number,
+    max: number,
+  ): number {
     const { value, source } = this.raw(key);
     if (value === undefined) return fallback;
 
-    const parsed = typeof value === "number" ? value : Number(String(value).trim());
+    const parsed =
+      typeof value === "number" ? value : Number(String(value).trim());
     if (!Number.isFinite(parsed)) {
-      warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
+      warn(
+        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
+      );
       return fallback;
     }
 
@@ -135,9 +150,10 @@ class Resolver {
     const { value, source } = this.raw(key);
     if (value === undefined) return undefined;
 
-    const requested = (Array.isArray(value)
-      ? value.map((entry) => String(entry))
-      : String(value).split(",")
+    const requested = (
+      Array.isArray(value)
+        ? value.map((entry) => String(entry))
+        : String(value).split(",")
     )
       .map((entry) => entry.trim().toLowerCase())
       .filter((entry) => entry.length > 0);
@@ -208,7 +224,9 @@ export function loadConfig(
   if (log || verbose) {
     const origin = configured ? resolve.source("presets") : "detected";
     const overridden = Object.entries(config)
-      .filter(([key]) => resolve.source(key as keyof RouterConfig) !== "default")
+      .filter(
+        ([key]) => resolve.source(key as keyof RouterConfig) !== "default",
+      )
       .map(([key]) => `${key}(${resolve.source(key as keyof RouterConfig)})`)
       .join(" ");
 

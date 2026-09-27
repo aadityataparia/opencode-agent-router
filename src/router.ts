@@ -26,11 +26,9 @@ export class Router {
         return [...candidates].sort(
           (a, b) => b.breakdown.cost - a.breakdown.cost,
         )[0];
-      case "priority":
-        return candidates[0];
       case "adaptive":
       default:
-        return this.adaptive(candidates);
+        return candidates[0];
     }
   }
 
@@ -58,21 +56,5 @@ export class Router {
     return Number.isFinite(candidate.model.latencyMs)
       ? candidate.model.latencyMs
       : Number.MAX_SAFE_INTEGER;
-  }
-
-  private adaptive(candidates: Candidate[]): Candidate {
-    return [...candidates].sort((a, b) => {
-      const aRate = this.health.successRate(a.model);
-      const bRate = this.health.successRate(b.model);
-      const aLatency = this.normalizedLatency(a);
-      const bLatency = this.normalizedLatency(b);
-
-      const aValue =
-        a.score + aRate * 0.25 - Math.min(aLatency / 10_000, 1) * 0.15;
-      const bValue =
-        b.score + bRate * 0.25 - Math.min(bLatency / 10_000, 1) * 0.15;
-
-      return bValue - aValue;
-    })[0];
   }
 }

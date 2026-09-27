@@ -404,7 +404,8 @@ export const OpenCodeAgentRouter = Plugin.define({
           agentName,
           models,
           userDefinedAgents,
-        ).filter(({ model }) => model.health >= config.minHealth);
+          config.minHealth,
+        );
 
         if (candidates.length === 0) {
           log(config.log, `no suitable model for ${agentName}; skipping`);

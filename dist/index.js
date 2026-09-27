@@ -300,7 +300,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 log(config.log, `presets ${config.presets.join(", ") || "(none)"} exclude ${skipped.length} agent(s): ${skipped.join(", ")}`);
             }
             for (const agentName of routedAgents) {
-                const candidates = findCandidates(agentName, models, userDefinedAgents).filter(({ model }) => model.health >= config.minHealth);
+                const candidates = findCandidates(agentName, models, userDefinedAgents, config.minHealth);
                 if (candidates.length === 0) {
                     log(config.log, `no suitable model for ${agentName}; skipping`);
                     continue;

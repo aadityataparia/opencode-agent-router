@@ -1,10 +1,9 @@
-import { detectPresets, isPresetName, PRESET_NAMES } from "./presets";
+import { detectPresets, isPresetName, PRESET_NAMES, } from "./presets";
 const strategies = new Set([
-    "priority",
     "round-robin",
     "weighted",
     "latency",
-    "rate",
+    "cost",
     "adaptive",
 ]);
 const ENV_PREFIX = "OCO_ROUTER_";

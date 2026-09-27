@@ -37,3 +37,12 @@ export const AGENT_NAMES = [
     ...SLIM_AGENT_NAMES,
     ...BASIC_AGENTS,
 ];
+export const MODEL_CATEGORIES = [
+    "reasoning",
+    "coding",
+    "fast",
+    "vision",
+    "long-context",
+    "cheap",
+    "general",
+];

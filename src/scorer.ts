@@ -1,9 +1,11 @@
 import { AGENT_REQUIREMENTS } from "./agents";
-import type {
-  AgentName,
-  Candidate,
-  DiscoveredModel,
-  AgentRequirements,
+import {
+  type AgentName,
+  type Candidate,
+  type DiscoveredModel,
+  type AgentRequirements,
+  type ModelCategory,
+  MODEL_CATEGORIES,
 } from "./types";
 
 function satisfies(model: DiscoveredModel, req: AgentRequirements): boolean {
@@ -16,10 +18,13 @@ function satisfies(model: DiscoveredModel, req: AgentRequirements): boolean {
 
 function categoryScore(model: DiscoveredModel, req: AgentRequirements): number {
   let score = 0;
-  for (const category of req.categories) {
-    if (model.categories.has(category)) score += req.weights[category] ?? 0;
+  let maxWeight = 0;
+  for (const [category, weight] of Object.entries(req.weights)) {
+    if (!MODEL_CATEGORIES.includes(category as ModelCategory)) continue;
+    if (model.categories.has(category as ModelCategory)) score += weight;
+    maxWeight += weight;
   }
-  return score;
+  return maxWeight === 0 ? 0 : score / maxWeight;
 }
 
 function latencyScore(model: DiscoveredModel): number {
@@ -55,14 +60,12 @@ function capabilityScore(
 }
 
 const defaultReq: AgentRequirements = {
-  categories: ["fast", "cheap", "general"],
   weights: {
-    cheap: 1,
-    fast: 1,
-    general: 0.5,
+    cheap: 0.4,
+    fast: 0.4,
+    general: 0.1,
   },
   latencyWeight: 1,
-  healthWeight: 1,
   costWeight: 1,
   contextWeight: 0.7,
 };
@@ -71,6 +74,7 @@ export function findCandidates(
   agent: AgentName,
   models: DiscoveredModel[],
   additionals: Record<string, AgentRequirements>,
+  minHeadlth: number = 0,
 ): Candidate[] {
   const req = {
     ...defaultReq,
@@ -78,7 +82,7 @@ export function findCandidates(
   };
 
   return models
-    .filter((model) => model.health > 0 && satisfies(model, req))
+    .filter((model) => model.health > minHeadlth && satisfies(model, req))
     .map((model) => {
       const breakdown = {
         category: categoryScore(model, req),
@@ -91,7 +95,6 @@ export function findCandidates(
 
       const score =
         breakdown.category +
-        req.healthWeight * breakdown.health +
         req.latencyWeight * breakdown.latency +
         req.costWeight * breakdown.cost +
         req.contextWeight * breakdown.context +

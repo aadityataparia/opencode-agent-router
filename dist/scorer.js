@@ -1,4 +1,5 @@
 import { AGENT_REQUIREMENTS } from "./agents";
+import { MODEL_CATEGORIES, } from "./types";
 function satisfies(model, req) {
     if (req.minContext && model.context < req.minContext)
         return false;
@@ -12,11 +13,15 @@ function satisfies(model, req) {
 }
 function categoryScore(model, req) {
     let score = 0;
-    for (const category of req.categories) {
+    let maxWeight = 0;
+    for (const [category, weight] of Object.entries(req.weights)) {
+        if (!MODEL_CATEGORIES.includes(category))
+            continue;
         if (model.categories.has(category))
-            score += req.weights[category] ?? 0;
+            score += weight;
+        maxWeight += weight;
     }
-    return score;
+    return maxWeight === 0 ? 0 : score / maxWeight;
 }
 function latencyScore(model) {
     if (!Number.isFinite(model.latencyMs))
@@ -24,9 +29,7 @@ function latencyScore(model) {
     return 1 / (1 + model.latencyMs / 1000);
 }
 function costScore(model) {
-    const input = model.cost.input;
-    if (typeof input !== "number")
-        return 0.5;
+    const input = (model.cost.input ?? 0) * 2 + (model.cost.output ?? 0);
     return 1 / (1 + Math.max(0, input));
 }
 function contextScore(model, req) {
@@ -47,24 +50,22 @@ function capabilityScore(model, req) {
         : checks.filter(Boolean).length / checks.length;
 }
 const defaultReq = {
-    categories: ["fast", "cheap", "general"],
     weights: {
-        cheap: 1,
-        fast: 1,
-        general: 0.5,
+        cheap: 0.4,
+        fast: 0.4,
+        general: 0.1,
     },
     latencyWeight: 1,
-    healthWeight: 1,
     costWeight: 1,
     contextWeight: 0.7,
 };
-export function findCandidates(agent, models, additionals) {
+export function findCandidates(agent, models, additionals, minHeadlth = 0) {
     const req = {
         ...defaultReq,
         ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
     };
     return models
-        .filter((model) => model.health > 0 && satisfies(model, req))
+        .filter((model) => model.health > minHeadlth && satisfies(model, req))
         .map((model) => {
         const breakdown = {
             category: categoryScore(model, req),
@@ -75,7 +76,6 @@ export function findCandidates(agent, models, additionals) {
             capabilities: capabilityScore(model, req),
         };
         const score = breakdown.category +
-            req.healthWeight * breakdown.health +
             req.latencyWeight * breakdown.latency +
             req.costWeight * breakdown.cost +
             req.contextWeight * breakdown.context +

@@ -67,17 +67,17 @@ Options go in the plugin entry's `options` object. Every one has an environment
 variable equivalent named `OCO_ROUTER_<OPTION>` in upper case, which wins over the
 config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
 
-| option           | default       | meaning                                                                                                  |
-| ---------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
-| `probe`          | `false`       | check that a model answers before routing to it                                                          |
-| `probeTimeoutMs` | `8000`        | how long a single probe may take                                                                         |
-| `refreshMs`      | `60000`       | how often to re-scan and re-assign                                                                       |
-| `strategy`       | `adaptive`    | how to choose among healthy models: `adaptive`, `priority`, `round-robin`, `weighted`, `latency`, `cost` |
-| `minHealth`      | `0.2`         | ignore models scoring below this, where 1 is perfect                                                     |
-| `maxFallbacks`   | `5`           | how many alternatives to try for one role                                                                |
-| `presets`        | auto-detected | which orchestrator plugins' agents to route                                                              |
-| `agents`         | `{}`          | custum agents to route                                                                                   |
-| `log`            | `false`       | print debug log                                                                                          |
+| option           | default       | meaning                                                                                      |
+| ---------------- | ------------- | -------------------------------------------------------------------------------------------- |
+| `probe`          | `false`       | check that a model answers before routing to it                                              |
+| `probeTimeoutMs` | `8000`        | how long a single probe may take                                                             |
+| `refreshMs`      | `60000`       | how often to re-scan and re-assign                                                           |
+| `strategy`       | `adaptive`    | how to choose among healthy models: `adaptive`, `round-robin`, `weighted`, `latency`, `cost` |
+| `minHealth`      | `0.2`         | ignore models scoring below this, where 1 is perfect                                         |
+| `maxFallbacks`   | `5`           | how many alternatives to try for one role                                                    |
+| `presets`        | auto-detected | which orchestrator plugins' agents to route                                                  |
+| `agents`         | `{}`          | custum agents to route                                                                       |
+| `log`            | `false`       | print debug log                                                                              |
 
 ```json
 {
@@ -85,7 +85,27 @@ config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
   "options": {
     "probe": true,
     "probeTimeoutMs": 5000,
-    "strategy": "cost"
+    "strategy": "cost",
+    "agents": {
+      "fast-coder": {
+        "weights": {
+          // weight can be given to "reasoning", "coding" ,"fast", "vision", "long-context", "cheap"
+          "coding": 1.0,
+          "fast": 0.9,
+          "cheap": 0.8,
+          "general": 0.3
+        },
+
+        "minContext": 32000,
+        "tools": true,
+        "vision": false,
+        "reasoning": false,
+
+        "latencyWeight": 0.3,
+        "costWeight": 0.3,
+        "contextWeight": 0.05
+      }
+    }
   }
 }
 ```

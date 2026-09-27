@@ -14,13 +14,11 @@ export class Router {
                 return this.weighted(candidates);
             case "latency":
                 return [...candidates].sort((a, b) => this.normalizedLatency(a) - this.normalizedLatency(b))[0];
-            case "rate":
-                return [...candidates].sort((a, b) => this.health.successRate(b.model) - this.health.successRate(a.model))[0];
-            case "priority":
-                return candidates[0];
+            case "cost":
+                return [...candidates].sort((a, b) => b.breakdown.cost - a.breakdown.cost)[0];
             case "adaptive":
             default:
-                return this.adaptive(candidates);
+                return candidates[0];
         }
     }
     roundRobin(agent, candidates) {
@@ -30,7 +28,7 @@ export class Router {
         return candidate;
     }
     weighted(candidates) {
-        const weights = candidates.map((candidate) => Math.max(0.01, candidate.score));
+        const weights = candidates.map((candidate) => candidate.score);
         const total = weights.reduce((a, b) => a + b, 0);
         let pick = Math.random() * total;
         for (let i = 0; i < candidates.length; i++) {
@@ -44,16 +42,5 @@ export class Router {
         return Number.isFinite(candidate.model.latencyMs)
             ? candidate.model.latencyMs
             : Number.MAX_SAFE_INTEGER;
-    }
-    adaptive(candidates) {
-        return [...candidates].sort((a, b) => {
-            const aRate = this.health.successRate(a.model);
-            const bRate = this.health.successRate(b.model);
-            const aLatency = this.normalizedLatency(a);
-            const bLatency = this.normalizedLatency(b);
-            const aValue = a.score + aRate * 0.25 - Math.min(aLatency / 10_000, 1) * 0.15;
-            const bValue = b.score + bRate * 0.25 - Math.min(bLatency / 10_000, 1) * 0.15;
-            return bValue - aValue;
-        })[0];
     }
 }
