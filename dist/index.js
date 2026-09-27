@@ -487,7 +487,7 @@ ${text}
                 }
                 case "pin": {
                     const agents = routedAgentNames();
-                    if (!agents.some((name) => name === parsed.agent)) {
+                    if (!agents.includes(parsed.agent)) {
                         await say(agents.length === 0
                             ? `No agents are in scope, so \`${parsed.agent}\` cannot be pinned. Set \`presets\` in the plugin options first.`
                             : `\`${parsed.agent}\` is not routed under presets ${config.presets.join(", ") || "(none)"}. Routed agents: ${agents.join(", ")}.`);
@@ -506,7 +506,7 @@ ${text}
                     const outcome = await applyRouting("pin");
                     await say(outcome.status === "failed"
                         ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\` (agent \`${routerAgentID(parsed.agent)}\`). Session-only; \`/router unpin\` to undo.`);
+                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changing model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
                     return;
                 }
                 case "unpin": {
