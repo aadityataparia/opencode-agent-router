@@ -359,8 +359,6 @@ export const OpenCodeAgentRouter = Plugin.define({
                 // Reloading replays the transform against this pass's assignments.
                 await ctx.agent.reload();
                 lastAssignments = signature;
-                // `unpin-all` belongs here as much as `unpin`: both clear a pin, and
-                // whichever one held this session must hand the model back.
                 if (opts.session &&
                     ["pin", "unpin", "unpin-all", "manual"].includes(reason)) {
                     const curAgent = opts.session.agent?.replace("model-router/", "");

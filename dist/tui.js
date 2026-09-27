@@ -125,7 +125,6 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     },
 });
 export default OpenCodeAgentRouterTui;
-/* ---------------------------------------------------------------- rendering */
 function element(tag, props = {}, children = []) {
     const node = createElement(tag);
     for (const [key, value] of Object.entries(props)) {
@@ -160,7 +159,9 @@ function header(theme, version, expanded, count, onToggle) {
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
-    const fg = options.current ? theme.text.feedback.success : theme.text.base;
+    const fg = options.current
+        ? theme.text.feedback.success.base
+        : theme.text.base;
     const marker = options.current ? "• " : "  ";
     return box({
         width: "100%",
@@ -172,7 +173,7 @@ function routeRow(theme, route, options) {
             `${marker}${route.agent}`,
         ]),
         text({
-            fg: theme.text.muted,
+            fg: options.current ? theme.text.base : theme.text.muted,
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,

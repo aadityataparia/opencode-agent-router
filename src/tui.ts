@@ -172,6 +172,8 @@ export default OpenCodeAgentRouterTui;
 
 /* ---------------------------------------------------------------- rendering */
 
+type PropType = string | number | Theme["text"]["base"] | boolean;
+
 function element(
   tag: string,
   props: Record<string, PropType> = {},
@@ -187,13 +189,6 @@ function element(
   }
   return node;
 }
-
-type PropType =
-  | string
-  | number
-  | {
-      toString: () => string;
-    };
 
 const box = (
   props: Record<string, PropType>,
@@ -241,7 +236,9 @@ function routeRow(
   route: Route,
   options: { current: boolean; variant?: string },
 ): Element {
-  const fg = options.current ? theme.text.feedback.success : theme.text.base;
+  const fg = options.current
+    ? theme.text.feedback.success.base
+    : theme.text.base;
   const marker = options.current ? "• " : "  ";
   return box(
     {
@@ -256,7 +253,7 @@ function routeRow(
       ]),
       text(
         {
-          fg: theme.text.muted,
+          fg: options.current ? theme.text.base : theme.text.muted,
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,
