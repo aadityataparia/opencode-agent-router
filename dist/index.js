@@ -503,7 +503,9 @@ ${text}
                     }
                     // No reachability check: a model the router can list, the agent can run.
                     pins.set(parsed.agent, modelRef(target));
-                    const outcome = await applyRouting("pin");
+                    const outcome = await applyRouting("pin", {
+                        session: curSession,
+                    });
                     await say(outcome.status === "failed"
                         ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
                         : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changing model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
@@ -515,7 +517,9 @@ ${text}
                         return;
                     }
                     pins.delete(parsed.agent);
-                    const outcome = await applyRouting("unpin");
+                    const outcome = await applyRouting("unpin", {
+                        session: curSession,
+                    });
                     await say(outcome.status === "failed"
                         ? `Removed the pin on \`${parsed.agent}\`, but re-applying routing failed; see the log.`
                         : `Unpinned \`${parsed.agent}\`; it is routed automatically again.`);
