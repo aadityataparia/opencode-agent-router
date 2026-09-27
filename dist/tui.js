@@ -150,7 +150,7 @@ function header(theme, version, expanded, count, onToggle) {
         justifyContent: "space-between",
         alignItems: "center",
     }, [
-        box({ paddingRight: 1, backgroundColor: theme.background.raised }, [
+        box({ paddingRight: 1, backgroundColor: theme.background.raised.base }, [
             text({ fg: theme.text.base, fontWeight: "bold" }, [
                 `${expanded ? "▼" : "▶"} Model Router (${count})`,
             ]),
@@ -160,7 +160,9 @@ function header(theme, version, expanded, count, onToggle) {
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
-    const fg = options.current ? theme.text.feedback : theme.text.base;
+    const fg = options.current
+        ? theme.background.feedback.success
+        : theme.text.base;
     const marker = options.current ? "• " : "  ";
     return box({
         width: "100%",

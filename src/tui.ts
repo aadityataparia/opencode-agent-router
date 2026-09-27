@@ -174,7 +174,7 @@ export default OpenCodeAgentRouterTui;
 
 function element(
   tag: string,
-  props: Record<string, unknown> = {},
+  props: Record<string, PropType> = {},
   children: unknown[] = [],
 ): Element {
   const node = createElement(tag);
@@ -188,16 +188,25 @@ function element(
   return node;
 }
 
+type PropType =
+  | string
+  | number
+  | {
+      toString: () => string;
+    };
+
 const box = (
-  props: Record<string, unknown>,
+  props: Record<string, PropType>,
   children: unknown[] = [],
 ): Element => element("box", props, children);
 
-const text = (props: Record<string, unknown>, children: unknown[]): Element =>
+const text = (props: Record<string, PropType>, children: unknown[]): Element =>
   element("text", props, children);
 
-const column = (props: Record<string, unknown>, children: unknown[]): Element =>
-  box({ flexDirection: "column", ...props }, children);
+const column = (
+  props: Record<string, PropType>,
+  children: unknown[],
+): Element => box({ flexDirection: "column", ...props }, children);
 
 /** `Model Router` badge on the left, plugin version muted on the right. */
 function header(
@@ -215,7 +224,7 @@ function header(
       alignItems: "center",
     },
     [
-      box({ paddingRight: 1, backgroundColor: theme.background.raised }, [
+      box({ paddingRight: 1, backgroundColor: theme.background.raised.base }, [
         text({ fg: theme.text.base, fontWeight: "bold" }, [
           `${expanded ? "▼" : "▶"} Model Router (${count})`,
         ]),
@@ -232,7 +241,9 @@ function routeRow(
   route: Route,
   options: { current: boolean; variant?: string },
 ): Element {
-  const fg = options.current ? theme.text.feedback : theme.text.base;
+  const fg = options.current
+    ? theme.background.feedback.success
+    : theme.text.base;
   const marker = options.current ? "• " : "  ";
   return box(
     {
