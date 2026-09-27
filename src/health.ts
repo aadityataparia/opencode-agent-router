@@ -38,7 +38,10 @@ export class HealthStore {
     current.latencyMs = Number.isFinite(current.latencyMs)
       ? current.latencyMs * 0.8 + latencyMs * 0.2
       : latencyMs;
-    current.health = Math.min(1, current.health * 0.8 + 1 * 0.2);
+    current.health =
+      current.successes + current.failures === 0
+        ? 1
+        : current.successes / (current.successes + current.failures);
     current.cooldownUntil = undefined;
   }
 
@@ -48,7 +51,10 @@ export class HealthStore {
 
     current.failures++;
     current.lastFailureAt = Date.now();
-    current.health = Math.max(0, current.health * 0.7);
+    current.health =
+      current.successes + current.failures === 0
+        ? 1
+        : current.successes / (current.successes + current.failures);
     current.cooldownUntil = Date.now() + cooldownMs;
   }
 

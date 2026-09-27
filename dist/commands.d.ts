@@ -45,7 +45,8 @@ export interface StatusView {
     pins: ReadonlyMap<string, string>;
     /** Agents eligible for routing under the active presets. */
     routedAgents: readonly string[];
-    currentAgent?: AgentRequirements;
+    currentAgent?: string;
+    currentAgentReq?: AgentRequirements;
     discovered: number;
     /** Models left in the pool after probing. */
     routable: number;

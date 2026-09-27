@@ -187,10 +187,7 @@ export function formatUsable(view) {
             "`/router refresh` to re-probe, and check the status for an auth block.",
         ].join("\n");
     }
-    lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`);
-    lines.push("");
-    lines.push("| model | health | score | latency |");
-    lines.push("| --- | --- | --- | --- |");
+    lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`, "", `| model | health | score (for ${view.currentAgent}) | latency |`, "| --- | --- | --- | --- |");
     for (const model of pool) {
         const latency = Number.isFinite(model.latencyMs) && model.latencyMs > 0
             ? `${Math.round(model.latencyMs)}ms`
@@ -198,7 +195,7 @@ export function formatUsable(view) {
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;
-        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgent).score.toFixed(2)} | ${latency}${seen} |`);
+        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgentReq).score.toFixed(2)} | ${latency}${seen} |`);
     }
     return lines.join("\n");
 }

@@ -432,7 +432,8 @@ export const OpenCodeAgentRouter = Plugin.define({
                 lastRun,
                 refreshMs: config.refreshMs,
                 now: Date.now(),
-                currentAgent: getAgentRequirements(agent, config.agents),
+                currentAgentReq: getAgentRequirements(agent, config.agents),
+                currentAgent: agent,
             });
         }
         const execute = async ({ sessionID, prompt, }) => {
@@ -462,7 +463,7 @@ ${text}
                     await say(renderStatus());
                     return;
                 case "usable":
-                    await say(renderUsable());
+                    await say(renderUsable(curSession?.agent?.replace("model-router/", "")));
                     return;
                 case "error":
                     await say(parsed.message);

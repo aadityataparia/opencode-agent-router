@@ -158,7 +158,8 @@ export interface StatusView {
   pins: ReadonlyMap<string, string>;
   /** Agents eligible for routing under the active presets. */
   routedAgents: readonly string[];
-  currentAgent?: AgentRequirements;
+  currentAgent?: string;
+  currentAgentReq?: AgentRequirements;
   discovered: number;
   /** Models left in the pool after probing. */
   routable: number;
@@ -291,10 +292,10 @@ export function formatUsable(view: StatusView): string {
 
   lines.push(
     `**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`,
+    "",
+    `| model | health | score (for ${view.currentAgent}) | latency |`,
+    "| --- | --- | --- | --- |",
   );
-  lines.push("");
-  lines.push("| model | health | score | latency |");
-  lines.push("| --- | --- | --- | --- |");
 
   for (const model of pool) {
     const latency =
@@ -306,7 +307,7 @@ export function formatUsable(view: StatusView): string {
         ? ""
         : ` · ${model.successes} ok / ${model.failures} failed`;
     lines.push(
-      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgent).score.toFixed(2)} | ${latency}${seen} |`,
+      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgentReq).score.toFixed(2)} | ${latency}${seen} |`,
     );
   }
 
