@@ -237,7 +237,7 @@ export function formatStatus(view: StatusView): string {
       }
 
       lines.push(
-        `| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${Math.round(model.latencyMs)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
+        `| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
       );
     }
   }
@@ -297,17 +297,24 @@ export function formatUsable(view: StatusView): string {
     "| --- | --- | --- | --- |",
   );
 
-  for (const model of pool) {
+  const sortedPool = pool
+    .map((p) => ({
+      model: p,
+      score: scoreModel(p, view.currentAgentReq).score,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  for (const { model, score } of sortedPool) {
     const latency =
       Number.isFinite(model.latencyMs) && model.latencyMs > 0
-        ? `${Math.round(model.latencyMs)}ms`
+        ? `${model.latencyMs.toFixed(0)}ms`
         : "—";
     const seen =
       model.lastProbeAt === undefined
         ? ""
         : ` · ${model.successes} ok / ${model.failures} failed`;
     lines.push(
-      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgentReq).score.toFixed(2)} | ${latency}${seen} |`,
+      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${score.toFixed(2)} | ${latency}${seen} |`,
     );
   }
 

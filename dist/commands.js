@@ -148,7 +148,7 @@ export function formatStatus(view) {
             if (view.authBlocked.some(([provider]) => provider === model.providerID)) {
                 notes.push("auth blocked");
             }
-            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${Math.round(model.latencyMs)}ms` : "—"} | ${notes.join("; ") || "—"} |`);
+            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`);
         }
     }
     lines.push("");
@@ -188,14 +188,20 @@ export function formatUsable(view) {
         ].join("\n");
     }
     lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`, "", `| model | health | score (for ${view.currentAgent}) | latency |`, "| --- | --- | --- | --- |");
-    for (const model of pool) {
+    const sortedPool = pool
+        .map((p) => ({
+        model: p,
+        score: scoreModel(p, view.currentAgentReq).score,
+    }))
+        .sort((a, b) => b.score - a.score);
+    for (const { model, score } of sortedPool) {
         const latency = Number.isFinite(model.latencyMs) && model.latencyMs > 0
-            ? `${Math.round(model.latencyMs)}ms`
+            ? `${model.latencyMs.toFixed(0)}ms`
             : "—";
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;
-        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${scoreModel(model, view.currentAgentReq).score.toFixed(2)} | ${latency}${seen} |`);
+        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${score.toFixed(2)} | ${latency}${seen} |`);
     }
     return lines.join("\n");
 }
