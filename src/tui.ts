@@ -232,7 +232,7 @@ function routeRow(
   route: Route,
   options: { current: boolean; variant?: string },
 ): Element {
-  const fg = options.current ? theme.text : theme.text.muted;
+  const fg = options.current ? theme.text.feedback : theme.text.base;
   const marker = options.current ? "• " : "  ";
   return box(
     {
