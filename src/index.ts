@@ -499,7 +499,10 @@ export const OpenCodeAgentRouter = Plugin.define({
         await ctx.agent.reload();
         lastAssignments = signature;
 
-        if (opts.session && ["pin", "unpin", "manual"].includes(reason)) {
+        if (
+          opts.session &&
+          ["pin", "unpin", "unpin-all", "manual"].includes(reason)
+        ) {
           const curAgent = opts.session.agent?.replace("model-router/", "");
           const selectedModel = curAgent
             ? currentAssignments.get(curAgent as AgentName)
@@ -725,8 +728,16 @@ ${text}
             return;
           }
           const names = [...pins.keys()].join(", ");
+          const cleared = new Set(pins.keys());
           pins.clear();
-          const outcome = await applyRouting("unpin-all");
+          // Only hand the session back when the pin that was holding it is one
+          // of the cleared ones: clearing a different agent's pin says nothing
+          // about which model this session should run on, and forcing one would
+          // overwrite a model the user chose by hand.
+          const curAgent = curSession.agent?.replace("model-router/", "");
+          const outcome = await applyRouting("unpin-all", {
+            session: curAgent && cleared.has(curAgent) ? curSession : undefined,
+          });
           await say(
             outcome.status === "failed"
               ? `Cleared ${count} pin(s) (${names}), but re-applying routing failed; see the log.`
