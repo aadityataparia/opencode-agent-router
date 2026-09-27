@@ -570,7 +570,7 @@ export const OpenCodeAgentRouter = Plugin.define({
 
     ctx.session.hook("context", async (input) => {
       input.messages.push({
-        role: "tool",
+        role: "system",
         content: [
           {
             type: "text",
