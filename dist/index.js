@@ -196,9 +196,12 @@ export const OpenCodeAgentRouter = Plugin.define({
                         log(config.log, `probe ${ref} skipped (cooldown)`);
                         return { model, usable: false, probed: false };
                     }
-                    // A cached result is not recovery: the model was never re-probed.
+                    // A cached result is not recovery: the model was never re-probed. A
+                    // cached *failure* must not read as usable either — that let every
+                    // model which had failed stay in the pool for the whole TTL, long
+                    // past its cooldown.
                     if (!force && !health.needsProbe(model, ttlMs)) {
-                        return { model, usable: true, probed: false };
+                        return { model, usable: model.successes > 0, probed: false };
                     }
                     const result = await probeModel(model, model.providerID, {
                         generate: ctx.generate.text,
@@ -410,7 +413,9 @@ export const OpenCodeAgentRouter = Plugin.define({
         }
         /** The models a routing pass could pick from, best health first. */
         function usablePool() {
-            return catalog.filter((model) => !health.isCoolingDown(model) && model.health >= config.minHealth);
+            return catalog.filter((model) => model.successes > 0 &&
+                !health.isCoolingDown(model) &&
+                model.health >= config.minHealth);
         }
         function renderUsable(agent) {
             return formatUsable({

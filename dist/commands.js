@@ -148,7 +148,7 @@ export function formatStatus(view) {
             if (view.authBlocked.some(([provider]) => provider === model.providerID)) {
                 notes.push("auth blocked");
             }
-            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${model.latencyMs}ms | ${notes.join("; ") || "—"} |`);
+            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${Math.round(model.latencyMs)}ms` : "—"} | ${notes.join("; ") || "—"} |`);
         }
     }
     lines.push("");
@@ -192,11 +192,9 @@ export function formatUsable(view) {
     lines.push("| model | health | score | latency |");
     lines.push("| --- | --- | --- | --- |");
     for (const model of pool) {
-        const latency = model.lastProbeAt === undefined
-            ? "—"
-            : model.latencyMs > 0
-                ? `${model.latencyMs}ms`
-                : "—";
+        const latency = Number.isFinite(model.latencyMs) && model.latencyMs > 0
+            ? `${Math.round(model.latencyMs)}ms`
+            : "—";
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;

@@ -236,7 +236,7 @@ export function formatStatus(view: StatusView): string {
       }
 
       lines.push(
-        `| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${model.latencyMs}ms | ${notes.join("; ") || "—"} |`,
+        `| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${Math.round(model.latencyMs)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
       );
     }
   }
@@ -298,11 +298,9 @@ export function formatUsable(view: StatusView): string {
 
   for (const model of pool) {
     const latency =
-      model.lastProbeAt === undefined
-        ? "—"
-        : model.latencyMs > 0
-          ? `${model.latencyMs}ms`
-          : "—";
+      Number.isFinite(model.latencyMs) && model.latencyMs > 0
+        ? `${Math.round(model.latencyMs)}ms`
+        : "—";
     const seen =
       model.lastProbeAt === undefined
         ? ""
