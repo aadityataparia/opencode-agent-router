@@ -365,8 +365,9 @@ export const OpenCodeAgentRouter = Plugin.define({
                         ? currentAssignments.get(curAgent)
                         : undefined;
                     if (selectedModel &&
-                        opts.session.model?.providerID !== selectedModel.model.providerID &&
-                        opts.session.model?.id !== selectedModel.model.id) {
+                        (opts.session.model?.providerID !==
+                            selectedModel.model.providerID ||
+                            opts.session.model?.id !== selectedModel.model.id)) {
                         await ctx.session.switchModel({
                             sessionID: opts.session.id,
                             model: {
@@ -509,7 +510,7 @@ ${text}
                     });
                     await say(outcome.status === "failed"
                         ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changing model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
+                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changed model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
                     return;
                 }
                 case "unpin": {
