@@ -22,10 +22,9 @@ export class Router {
         return [...candidates].sort(
           (a, b) => this.normalizedLatency(a) - this.normalizedLatency(b),
         )[0];
-      case "rate":
+      case "cost":
         return [...candidates].sort(
-          (a, b) =>
-            this.health.successRate(b.model) - this.health.successRate(a.model),
+          (a, b) => b.breakdown.cost - a.breakdown.cost,
         )[0];
       case "priority":
         return candidates[0];
@@ -43,9 +42,7 @@ export class Router {
   }
 
   private weighted(candidates: Candidate[]): Candidate {
-    const weights = candidates.map((candidate) =>
-      Math.max(0.01, candidate.score),
-    );
+    const weights = candidates.map((candidate) => candidate.score);
     const total = weights.reduce((a, b) => a + b, 0);
     let pick = Math.random() * total;
 

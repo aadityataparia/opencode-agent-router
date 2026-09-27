@@ -127,14 +127,14 @@ export function formatStatus(view) {
         lines.push("No agents are in scope. Set `presets` in the plugin options, or declare an `agents` entry.");
     }
     else {
-        lines.push("| agent | model | health | note |");
-        lines.push("| --- | --- | --- | --- |");
+        lines.push("| agent | model | health | latency | note |");
+        lines.push("| --- | --- | --- | --- | --- |");
         for (const agent of routed) {
             const model = view.assignments.get(agent);
             const pin = view.pins.get(agent);
             if (!model) {
                 const note = pin ? "pinned model unavailable" : "no candidate";
-                lines.push(`| \`${agent}\` | — | — | ${note} |`);
+                lines.push(`| \`${agent}\` | — | — | — | ${note} |`);
                 continue;
             }
             const notes = [];
@@ -148,7 +148,7 @@ export function formatStatus(view) {
             if (view.authBlocked.some(([provider]) => provider === model.providerID)) {
                 notes.push("auth blocked");
             }
-            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${notes.join("; ") || "—"} |`);
+            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${model.latencyMs}ms | ${notes.join("; ") || "—"} |`);
         }
     }
     lines.push("");

@@ -28,8 +28,7 @@ function latencyScore(model: DiscoveredModel): number {
 }
 
 function costScore(model: DiscoveredModel): number {
-  const input = model.cost.input;
-  if (typeof input !== "number") return 0.5;
+  const input = (model.cost.input ?? 0) * 2 + (model.cost.output ?? 0);
   return 1 / (1 + Math.max(0, input));
 }
 

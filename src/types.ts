@@ -67,7 +67,7 @@ export type RoutingStrategy =
   | "round-robin"
   | "weighted"
   | "latency"
-  | "rate"
+  | "cost"
   | "adaptive";
 
 export interface ModelCapabilities {

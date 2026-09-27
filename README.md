@@ -15,8 +15,10 @@ Add it to `opencode.jsonc`:
 {
   "$schema": "https://opencode.ai/config.json",
   "plugins": [
-    { "package": "git+https://github.com/aadityataparia/opencode-agent-router.git#main" }
-  ]
+    {
+      "package": "git+https://github.com/aadityataparia/opencode-agent-router.git#main",
+    },
+  ],
 }
 ```
 
@@ -48,13 +50,13 @@ full list.
 Run it from OpenCode's command picker so it reaches the plugin. Replies are posted
 to the session, so they cost no model call.
 
-| command | effect |
-| --- | --- |
-| `/router` | show routing status |
-| `/router refresh` | re-scan and re-probe now, ignoring probe cache and cooldown |
-| `/router pin <agent> <model>` | force one agent onto one model |
-| `/router unpin <agent>` | drop one pin |
-| `/router unpin` | drop every pin |
+| command                       | effect                                                      |
+| ----------------------------- | ----------------------------------------------------------- |
+| `/router`                     | show routing status                                         |
+| `/router refresh`             | re-scan and re-probe now, ignoring probe cache and cooldown |
+| `/router pin <agent> <model>` | force one agent onto one model                              |
+| `/router unpin <agent>`       | drop one pin                                                |
+| `/router unpin`               | drop every pin                                              |
 
 Pins last for the session only and are lost on restart. For a permanent change,
 edit the agent file or set `presets` in the plugin options.
@@ -65,17 +67,17 @@ Options go in the plugin entry's `options` object. Every one has an environment
 variable equivalent named `OCO_ROUTER_<OPTION>` in upper case, which wins over the
 config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
 
-| option | default | meaning |
-| --- | --- | --- |
-| `probe` | `false` | check that a model answers before routing to it |
-| `probeTimeoutMs` | `8000` | how long a single probe may take |
-| `refreshMs` | `60000` | how often to re-scan and re-assign |
-| `strategy` | `adaptive` | how to choose among healthy models: `adaptive`, `priority`, `round-robin`, `weighted`, `latency` |
-| `minHealth` | `0.2` | ignore models scoring below this, where 1 is perfect |
-| `maxFallbacks` | `5` | how many alternatives to try for one role |
-| `presets` | auto-detected | which orchestrator plugins' agents to route |
-| `agents` | `{}` | route these agents regardless of preset |
-| `log` | `false` | print routing decisions to the log |
+| option           | default       | meaning                                                                                                  |
+| ---------------- | ------------- | -------------------------------------------------------------------------------------------------------- |
+| `probe`          | `false`       | check that a model answers before routing to it                                                          |
+| `probeTimeoutMs` | `8000`        | how long a single probe may take                                                                         |
+| `refreshMs`      | `60000`       | how often to re-scan and re-assign                                                                       |
+| `strategy`       | `adaptive`    | how to choose among healthy models: `adaptive`, `priority`, `round-robin`, `weighted`, `latency`, `cost` |
+| `minHealth`      | `0.2`         | ignore models scoring below this, where 1 is perfect                                                     |
+| `maxFallbacks`   | `5`           | how many alternatives to try for one role                                                                |
+| `presets`        | auto-detected | which orchestrator plugins' agents to route                                                              |
+| `agents`         | `{}`          | custum agents to route                                                                                   |
+| `log`            | `false`       | print debug log                                                                                          |
 
 ```json
 {
@@ -83,7 +85,7 @@ config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
   "options": {
     "probe": true,
     "probeTimeoutMs": 5000,
-    "presets": ["oh-my-opencode-slim"]
+    "strategy": "cost"
   }
 }
 ```
