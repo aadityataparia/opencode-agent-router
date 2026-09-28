@@ -189,7 +189,7 @@ export function formatUsable(view) {
             "`/router refresh` to re-probe, and check the status for an auth block.",
         ].join("\n");
     }
-    lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`, "", `| model | health | score (for ${view.currentAgent}) | latency |`, "| --- | --- | --- | --- |");
+    lines.push(`**${view.routable} model(s) routable** · ${pool.length} usable for ${view.currentAgent} · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`, "", `| model | health | score (for ${view.currentAgent}) | latency |`, "| --- | --- | --- | --- |");
     for (const { model, score } of pool) {
         const latency = Number.isFinite(model.latencyMs) && model.latencyMs > 0
             ? `${model.latencyMs.toFixed(0)}ms`

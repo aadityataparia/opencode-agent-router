@@ -297,7 +297,7 @@ export function formatUsable(view: StatusView): string {
   }
 
   lines.push(
-    `**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`,
+    `**${view.routable} model(s) routable** · ${pool.length} usable for ${view.currentAgent} · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`,
     "",
     `| model | health | score (for ${view.currentAgent}) | latency |`,
     "| --- | --- | --- | --- |",

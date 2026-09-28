@@ -537,7 +537,7 @@ ${text}
                     }
                     const cap = target.capabilities;
                     await say(`**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
-                        `*categories*: ${(Array.from(target.categories) || []).join(", ") || "(none)"}\n` +
+                        `*categories*: ${Array.from(target.categories).join(", ") || "none"}\n` +
                         `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`);
                     return;
                 }
