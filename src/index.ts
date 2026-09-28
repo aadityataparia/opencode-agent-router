@@ -747,21 +747,50 @@ ${text}
           );
           const cap = target.capabilities;
           const b = score.breakdown;
-          const term = (label: string, value: number, counts: boolean) =>
-            `  ${label.padEnd(12)} ${value.toFixed(3)}${counts ? "" : "  (informational)"}`;
+          const term = (
+            label: string,
+            value: number | string,
+            counts: boolean,
+            extra?: string,
+          ) =>
+            `| ${label.padEnd(12)}${counts ? "" : "*"} | ${typeof value === "number" ? value.toFixed(3) : value} | ${extra ?? ""} |`;
           await say(
             `**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
-              `*categories*: ${Array.from(target.categories).join(", ") || "none"}\n` +
-              `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}\n` +
               `*score for \`${curSession.agent ?? "?"}\`*: ${score.score.toFixed(3)}\n` +
               [
-                term("category", b.category, true),
-                term("capabilities", b.capabilities, true),
-                term("recency", b.recency, true),
-                term("health", b.health, false),
-                term("latency", b.latency, false),
-                term("cost", b.cost, false),
-                term("context", b.context, false),
+                term("Score tyoe", "Calculated Score", true, "Info"),
+                term("---", "---", true, "---"),
+                term(
+                  "category",
+                  b.category,
+                  true,
+                  `${Array.from(target.categories).join(", ") || "none"}`,
+                ),
+                term(
+                  "capabilities",
+                  b.capabilities,
+                  true,
+                  `reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`,
+                ),
+                term(
+                  "recency",
+                  b.recency,
+                  true,
+                  target.releasedAt
+                    ? new Date(target.releasedAt).toLocaleDateString()
+                    : "",
+                ),
+                term("health", b.health, false, target.health.toFixed(2)),
+                term("latency", b.latency, false, `avg - ${target.latencyMs}`),
+                term(
+                  "cost",
+                  b.cost,
+                  false,
+                  `(input $${target.cost.input}, output $${target.cost.output})`,
+                ),
+                term("context", b.context, false, target.context.toFixed(0)),
+                "",
+                "    * counted in category score with weights in config",
               ].join("\n"),
           );
           return;
