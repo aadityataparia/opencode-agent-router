@@ -32,7 +32,7 @@ function describe(error) {
  * matched textually; the status code is preferred where one is present.
  */
 function classify(status, detail) {
-    if (/insufficient|credits/i.test(detail)) {
+    if (/insufficient|credits|exhausted/i.test(detail)) {
         return "unusable";
     }
     if (status === 429 ||
