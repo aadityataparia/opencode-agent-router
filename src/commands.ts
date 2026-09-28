@@ -1,4 +1,3 @@
-import { scoreModel } from "./scorer";
 import type { Candidate, DiscoveredModel, RouterConfig } from "./types";
 
 /**
@@ -308,7 +307,7 @@ export function formatUsable(view: StatusView): string {
         ? ""
         : ` · ${model.successes} ok / ${model.failures} failed`;
     lines.push(
-      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${score.toFixed(2)} | ${latency}${seen} |`,
+      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`,
     );
   }
 

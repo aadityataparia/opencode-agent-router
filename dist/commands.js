@@ -197,7 +197,7 @@ export function formatUsable(view) {
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;
-        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${score.toFixed(2)} | ${latency}${seen} |`);
+        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`);
     }
     return lines.join("\n");
 }

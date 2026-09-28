@@ -2,7 +2,7 @@ const COMMON_AGENTS = {
     architect: {
         // Master delegator and strategic coordinator.
         weights: {
-            cheap: 0.0,
+            cheap: 0.01,
             fast: 0.5,
             reasoning: 1.0,
             coding: 0.8,
@@ -41,22 +41,27 @@ const COMMON_AGENTS = {
 export const AGENT_REQUIREMENTS = {
     sisyphus: COMMON_AGENTS.architect,
     hephaestus: {
-        weights: { coding: 1.0, reasoning: 0.9, general: 0.4 },
+        weights: { coding: 1.0, reasoning: 0.9, general: 0.4, cheap: 0.01 },
         minContext: 64000,
         tools: true,
     },
     prometheus: {
-        weights: { reasoning: 1.0, "long-context": 0.95, general: 0.3 },
+        weights: {
+            reasoning: 1.0,
+            "long-context": 0.95,
+            general: 0.3,
+            cheap: 0.01,
+        },
         minContext: 100_000,
         tools: true,
     },
     atlas: {
-        weights: { coding: 1.0, reasoning: 0.85, general: 0.4 },
+        weights: { coding: 1.0, reasoning: 0.85, general: 0.4, cheap: 0.01 },
         minContext: 64000,
         tools: true,
     },
     explore: {
-        weights: { fast: 1.0, coding: 0.8, general: 0.4 },
+        weights: { fast: 1.0, coding: 0.8, general: 0.4, cheap: 0.01 },
         minContext: 32000,
         tools: true,
     },
@@ -73,12 +78,12 @@ export const AGENT_REQUIREMENTS = {
         tools: true,
     },
     metis: {
-        weights: { reasoning: 1.0, "long-context": 0.8, general: 0.3 },
+        weights: { reasoning: 1.0, "long-context": 0.8, general: 0.3, cheap: 0.01 },
         minContext: 100000,
         tools: true,
     },
     momus: {
-        weights: { reasoning: 1.0, coding: 0.7, "long-context": 0.8 },
+        weights: { reasoning: 1.0, coding: 0.7, "long-context": 0.8, cheap: 0.01 },
         minContext: 100000,
         tools: true,
     },
@@ -127,6 +132,7 @@ export const AGENT_REQUIREMENTS = {
             reasoning: 1.0,
             coding: 0.8,
             "long-context": 0.95,
+            cheap: 0.01,
         },
         minContext: 100000,
         tools: true,
@@ -135,7 +141,7 @@ export const AGENT_REQUIREMENTS = {
         // Multi-LLM consensus and synthesis. Council itself wants a strong
         // synthesis model; its councillors are configured separately.
         weights: {
-            cheap: 0.0,
+            cheap: 0.01,
             fast: 0.0,
             reasoning: 1.0,
             "long-context": 0.95,
