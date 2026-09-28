@@ -19,6 +19,7 @@ export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
 export interface ProbeResult {
   readonly verdict: ProbeVerdict;
   readonly latencyMs: number;
+  readonly reply?: string;
   readonly status?: number;
   readonly error?: string;
 }
@@ -113,9 +114,9 @@ export async function probeModel(
       );
     });
 
-    await Promise.race([call, timeout]);
+    const ret = await Promise.race([call, timeout]);
 
-    return { verdict: "ok", latencyMs: Date.now() - started };
+    return { verdict: "ok", reply: ret.text, latencyMs: Date.now() - started };
   } catch (error) {
     const detail = describe(error);
     return {

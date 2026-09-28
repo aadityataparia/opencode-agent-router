@@ -16,6 +16,7 @@ export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
 export interface ProbeResult {
     readonly verdict: ProbeVerdict;
     readonly latencyMs: number;
+    readonly reply?: string;
     readonly status?: number;
     readonly error?: string;
 }

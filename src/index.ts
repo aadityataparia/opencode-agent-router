@@ -228,7 +228,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         routable,
         PROBE_CONCURRENCY,
         async (model) => {
-          const ref = `${model.providerID}/${model.modelID ?? model.id}`;
+          const ref = model.target;
 
           // One model's failure must not void the batch: `mapWithConcurrency`
           // joins with `Promise.all`.
@@ -272,11 +272,12 @@ export const OpenCodeAgentRouter = Plugin.define({
 
             log(
               config.log,
-              result.verdict === "ok"
-                ? `probe ${ref} ok in ${result.latencyMs}ms`
-                : result.verdict === "inconclusive"
-                  ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
-                  : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`,
+              "[probe] " +
+                (result.verdict === "ok"
+                  ? `probe ${ref} ok in ${result.latencyMs}ms with reply: ${result.reply ?? ""}`
+                  : result.verdict === "inconclusive"
+                    ? `probe ${ref} inconclusive (${result.status ?? "network"}): ${result.error}`
+                    : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`),
             );
 
             // A rejected credential excludes the model; only a throttle keeps it in.
