@@ -118,11 +118,12 @@ export async function probeModel(
     });
 
     const ret = await Promise.race([call, timeout]);
+    const errored = hasError(ret.text);
 
     return {
-      verdict: hasError(ret.text) ? "unusable" : "ok",
-      reply: ret.text,
-      error: ret.text,
+      verdict: errored ? "unusable" : "ok",
+      reply: errored ? undefined : ret.text,
+      error: errored ? ret.text : undefined,
       latencyMs: Date.now() - started,
     };
   } catch (error) {

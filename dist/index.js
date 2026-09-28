@@ -583,10 +583,10 @@ ${text}
                         detail.push(`status: ${result.status}`);
                     if (result.error)
                         detail.push(`error: ${result.error}`);
-                    detail.push(`reply: ${result.reply ? JSON.stringify(result.reply) : "(none)"}`);
+                    detail.push(`reply: ${result.reply ?? "(none)"}`);
                     const hint = {
-                        ok: `The endpoint answered with reply: ${result.reply}`,
-                        unusable: `Error in probing. Status: ${result.status}, Error: ${result.error}`,
+                        ok: `The endpoint answered.`,
+                        unusable: `Error in probing.`,
                         unauthorized: "The credential was rejected. Reconnect with `opencode auth login`.",
                         inconclusive: "Rate limited, try again after some time.",
                     };

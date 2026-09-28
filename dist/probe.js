@@ -69,10 +69,11 @@ export async function probeModel(model, options) {
             timer = setTimeout(() => reject(new Error(`probe timed out after ${options.timeoutMs}ms`)), options.timeoutMs);
         });
         const ret = await Promise.race([call, timeout]);
+        const errored = hasError(ret.text);
         return {
-            verdict: hasError(ret.text) ? "unusable" : "ok",
-            reply: ret.text,
-            error: ret.text,
+            verdict: errored ? "unusable" : "ok",
+            reply: errored ? undefined : ret.text,
+            error: errored ? ret.text : undefined,
             latencyMs: Date.now() - started,
         };
     }
