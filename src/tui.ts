@@ -13,6 +13,7 @@ interface SelectedModel {
   readonly id: string;
   readonly variant?: string;
   readonly agent?: string;
+  readonly target: string;
 }
 
 interface Route {
@@ -96,6 +97,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
           ...visible.map((route) =>
             routeRow(theme, route, {
               current: route.agent === current?.agent,
+              currentModel: route.target === selected?.target,
               variant:
                 route.agent === current?.agent ? selected?.variant : undefined,
             }),
@@ -233,11 +235,12 @@ function header(
 function routeRow(
   theme: Theme,
   route: Route,
-  options: { current: boolean; variant?: string },
+  options: { current: boolean; currentModel: boolean; variant?: string },
 ): Element {
-  const fg = options.current
-    ? theme.text.feedback.success.base
-    : theme.text.base;
+  const fg =
+    options.current && options.currentModel
+      ? theme.text.feedback.success.base
+      : theme.text.base;
   const marker = options.current ? "• " : "  ";
   return box(
     {
@@ -248,11 +251,14 @@ function routeRow(
     },
     [
       text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
-        `${marker}${route.agent}`,
+        `${marker}${route.agent} ${options.current && !options.currentModel ? "\n (Model Manually changed)" : ""}`,
       ]),
       text(
         {
-          fg: options.current ? theme.text.base : theme.text.muted,
+          fg:
+            options.current && options.currentModel
+              ? theme.text.base
+              : theme.text.muted,
           wrapMode: "none",
           truncate: true,
           flexShrink: 1,
@@ -335,6 +341,7 @@ function readSelection(
           providerID: model.providerID,
           id: model.id,
           variant: model.variant,
+          target: `${model.providerID}/${model.id}`,
           agent,
         }
       : undefined;
@@ -345,6 +352,7 @@ function readSelection(
   if (!primary?.model) return undefined;
   return {
     providerID: primary.model.providerID,
+    target: `${primary.model.providerID}/${primary.model.id}`,
     id: primary.model.id,
     agent: primary.id,
   };

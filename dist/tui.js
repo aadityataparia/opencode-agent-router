@@ -66,6 +66,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                 }),
                 ...visible.map((route) => routeRow(theme, route, {
                     current: route.agent === current?.agent,
+                    currentModel: route.target === selected?.target,
                     variant: route.agent === current?.agent ? selected?.variant : undefined,
                 })),
                 ...emptyState(theme, routes, current, expanded),
@@ -158,7 +159,7 @@ function header(theme, version, expanded, count, onToggle) {
     return interactive(row, onToggle);
 }
 function routeRow(theme, route, options) {
-    const fg = options.current
+    const fg = options.current && options.currentModel
         ? theme.text.feedback.success.base
         : theme.text.base;
     const marker = options.current ? "• " : "  ";
@@ -169,10 +170,12 @@ function routeRow(theme, route, options) {
         shouldFill: true,
     }, [
         text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
-            `${marker}${route.agent}`,
+            `${marker}${route.agent} ${options.current && !options.currentModel ? "\n (Model Manually changed)" : ""}`,
         ]),
         text({
-            fg: options.current ? theme.text.base : theme.text.muted,
+            fg: options.current && options.currentModel
+                ? theme.text.base
+                : theme.text.muted,
             wrapMode: "none",
             truncate: true,
             flexShrink: 1,
@@ -240,6 +243,7 @@ function readSelection(ctx, location) {
                 providerID: model.providerID,
                 id: model.id,
                 variant: model.variant,
+                target: `${model.providerID}/${model.id}`,
                 agent,
             }
             : undefined;
@@ -250,6 +254,7 @@ function readSelection(ctx, location) {
         return undefined;
     return {
         providerID: primary.model.providerID,
+        target: `${primary.model.providerID}/${primary.model.id}`,
         id: primary.model.id,
         agent: primary.id,
     };
