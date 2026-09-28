@@ -1,7 +1,7 @@
 import { syncRoutedAgents } from "./agent-files";
 import { loadConfig } from "./config";
 import { classifyModel } from "./classifier";
-import { countMatches, findModel, formatStatus, formatUsable, HELP_TEXT, modelRef, parseCommand, ROUTER_COMMAND, } from "./commands";
+import { countMatches, findModel, formatStatus, formatUsable, HELP_TEXT, parseCommand, ROUTER_COMMAND, } from "./commands";
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
@@ -182,7 +182,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                     if (!force && !health.needsProbe(model, ttlMs)) {
                         return { model, usable: model.successes > 0, probed: false };
                     }
-                    const result = await probeModel(model, model.providerID, {
+                    const result = await probeModel(model, {
                         generate: ctx.generate.text,
                         timeoutMs: config.probeTimeoutMs,
                     });
@@ -499,19 +499,19 @@ ${text}
                     const target = findModel(catalog, parsed.model);
                     if (!target) {
                         const matches = countMatches(catalog, parsed.model);
-                        await say(matches > 1
-                            ? `\`${parsed.model}\` matches ${matches} models; qualify it as \`provider/model\`.`
+                        await say(matches.length > 1
+                            ? `\`${parsed.model}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}.`
                             : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
                         return;
                     }
                     // No reachability check: a model the router can list, the agent can run.
-                    pins.set(parsed.agent, modelRef(target));
+                    pins.set(parsed.agent, target.target);
                     const outcome = await applyRouting("pin", {
                         session: curSession,
                     });
                     await say(outcome.status === "failed"
-                        ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-                        : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changed model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
+                        ? `Pin recorded for ${parsed.agent} -> ${target.target}, but applying it failed; see the log.`
+                        : `Pinned \`${parsed.agent}\` -> \`${target.target}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changed model to pinned model: ${target.providerID}/${target.modelID}` : ""}`);
                     return;
                 }
                 case "unpin": {
@@ -532,8 +532,8 @@ ${text}
                     const target = findModel(catalog, parsed.modelRef);
                     if (!target) {
                         const matches = countMatches(catalog, parsed.modelRef);
-                        await say(matches > 1
-                            ? `\`${parsed.modelRef}\` matches ${matches} models.`
+                        await say(matches.length > 1
+                            ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
                             : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`);
                         return;
                     }
@@ -541,7 +541,7 @@ ${text}
                     const cap = target.capabilities;
                     const b = score.breakdown;
                     const term = (label, value, counts, extra) => `| ${label.padEnd(12)}${counts ? "" : "*"} | ${typeof value === "number" ? value.toFixed(3) : value} | ${extra ?? ""} |`;
-                    await say(`**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
+                    await say(`**\`${target.target}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
                         `*score for \`${curSession.agent ?? "?"}\`*: ${score.score.toFixed(3)}\n` +
                         [
                             term("Score tyoe", "Calculated Score", true, "Info"),
@@ -564,20 +564,20 @@ ${text}
                     const target = findModel(catalog, parsed.modelRef);
                     if (!target) {
                         const matches = countMatches(catalog, parsed.modelRef);
-                        await say(matches > 1
-                            ? `\`${parsed.modelRef}\` matches ${matches} models.`
+                        await say(matches.length > 1
+                            ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
                             : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`);
                         return;
                     }
                     // Forced and unconditional: a user asking now is asking past the probe
                     // cache and past any cooldown. Deliberately not recorded, so diagnosing
                     // a model cannot move routing underneath the user.
-                    const result = await probeModel(target, target.providerID, {
+                    const result = await probeModel(target, {
                         generate: ctx.generate.text,
                         timeoutMs: config.probeTimeoutMs,
                     });
                     const detail = [
-                        `**probe \`${modelRef(target)}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,
+                        `**probe \`${target.target}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,
                     ];
                     if (result.status !== undefined)
                         detail.push(`status: ${result.status}`);

@@ -25,6 +25,6 @@ export interface ProbeOptions {
     readonly generate: Context["generate"]["text"];
     readonly timeoutMs: number;
 }
-export declare function probeModel(model: Pick<DiscoveredModel, "id" | "modelID">, providerID: string, options: ProbeOptions): Promise<ProbeResult>;
+export declare function probeModel(model: Pick<DiscoveredModel, "id" | "modelID" | "providerID">, options: ProbeOptions): Promise<ProbeResult>;
 /** Runs `worker` over `items`, at most `limit` at a time, preserving order. */
 export declare function mapWithConcurrency<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]>;

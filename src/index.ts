@@ -7,7 +7,6 @@ import {
   formatStatus,
   formatUsable,
   HELP_TEXT,
-  modelRef,
   parseCommand,
   ROUTER_COMMAND,
 } from "./commands";
@@ -248,7 +247,7 @@ export const OpenCodeAgentRouter = Plugin.define({
               return { model, usable: model.successes > 0, probed: false };
             }
 
-            const result = await probeModel(model, model.providerID, {
+            const result = await probeModel(model, {
               generate: ctx.generate.text,
               timeoutMs: config.probeTimeoutMs,
             });
@@ -693,23 +692,23 @@ ${text}
           if (!target) {
             const matches = countMatches(catalog, parsed.model);
             await say(
-              matches > 1
-                ? `\`${parsed.model}\` matches ${matches} models; qualify it as \`provider/model\`.`
+              matches.length > 1
+                ? `\`${parsed.model}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}.`
                 : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`,
             );
             return;
           }
 
           // No reachability check: a model the router can list, the agent can run.
-          pins.set(parsed.agent, modelRef(target));
+          pins.set(parsed.agent, target.target);
           const outcome = await applyRouting("pin", {
             session: curSession,
           });
 
           await say(
             outcome.status === "failed"
-              ? `Pin recorded for ${parsed.agent} -> ${modelRef(target)}, but applying it failed; see the log.`
-              : `Pinned \`${parsed.agent}\` -> \`${modelRef(target)}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changed model to pinned model: ${target.providerID}/${target.modelID}` : ""}`,
+              ? `Pin recorded for ${parsed.agent} -> ${target.target}, but applying it failed; see the log.`
+              : `Pinned \`${parsed.agent}\` -> \`${target.target}\`. Session-only; run \`/router unpin\` to undo. ${curSession.agent === parsed.agent ? `Current agent has changed, changed model to pinned model: ${target.providerID}/${target.modelID}` : ""}`,
           );
           return;
         }
@@ -736,8 +735,8 @@ ${text}
           if (!target) {
             const matches = countMatches(catalog, parsed.modelRef);
             await say(
-              matches > 1
-                ? `\`${parsed.modelRef}\` matches ${matches} models.`
+              matches.length > 1
+                ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
                 : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`,
             );
             return;
@@ -756,7 +755,7 @@ ${text}
           ) =>
             `| ${label.padEnd(12)}${counts ? "" : "*"} | ${typeof value === "number" ? value.toFixed(3) : value} | ${extra ?? ""} |`;
           await say(
-            `**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
+            `**\`${target.target}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
               `*score for \`${curSession.agent ?? "?"}\`*: ${score.score.toFixed(3)}\n` +
               [
                 term("Score tyoe", "Calculated Score", true, "Info"),
@@ -802,8 +801,8 @@ ${text}
           if (!target) {
             const matches = countMatches(catalog, parsed.modelRef);
             await say(
-              matches > 1
-                ? `\`${parsed.modelRef}\` matches ${matches} models.`
+              matches.length > 1
+                ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
                 : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`,
             );
             return;
@@ -812,13 +811,13 @@ ${text}
           // Forced and unconditional: a user asking now is asking past the probe
           // cache and past any cooldown. Deliberately not recorded, so diagnosing
           // a model cannot move routing underneath the user.
-          const result = await probeModel(target, target.providerID, {
+          const result = await probeModel(target, {
             generate: ctx.generate.text,
             timeoutMs: config.probeTimeoutMs,
           });
 
           const detail: string[] = [
-            `**probe \`${modelRef(target)}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,
+            `**probe \`${target.target}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,
           ];
           if (result.status !== undefined)
             detail.push(`status: ${result.status}`);

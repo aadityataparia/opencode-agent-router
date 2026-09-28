@@ -96,8 +96,7 @@ const hasError = (reply: string) => {
 };
 
 export async function probeModel(
-  model: Pick<DiscoveredModel, "id" | "modelID">,
-  providerID: string,
+  model: Pick<DiscoveredModel, "id" | "modelID" | "providerID">,
   options: ProbeOptions,
 ): Promise<ProbeResult> {
   const started = Date.now();
@@ -108,7 +107,7 @@ export async function probeModel(
     // here and the loser's result is dropped.
     const call = options.generate({
       prompt: PROMPT,
-      model: { providerID, id: model.modelID ?? model.id },
+      model: { providerID: model.providerID, id: model.modelID ?? model.id },
     });
 
     const timeout = new Promise<never>((_resolve, reject) => {

@@ -34,8 +34,6 @@ export type ParsedCommand = {
     modelRef: string;
 };
 export declare function parseCommand(text: string): ParsedCommand;
-/** Canonical `provider/model` identity used for pins and display. */
-export declare function modelRef(model: Pick<DiscoveredModel, "providerID" | "id" | "modelID">): string;
 /**
  * Accepts `provider/model` or a bare `model`, but a bare name only when it is
  * unambiguous — silently picking between same-named models would route an agent
@@ -43,7 +41,7 @@ export declare function modelRef(model: Pick<DiscoveredModel, "providerID" | "id
  */
 export declare function findModel(models: readonly DiscoveredModel[], ref: string): DiscoveredModel | undefined;
 /** How many models a bare reference is ambiguous between, for a better error. */
-export declare function countMatches(models: readonly DiscoveredModel[], ref: string): number;
+export declare function countMatches(models: readonly DiscoveredModel[], ref: string): DiscoveredModel[];
 export interface StatusView {
     config: RouterConfig;
     /** Agent -> chosen model for the routed agents currently published. */

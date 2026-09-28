@@ -88,10 +88,6 @@ export function parseCommand(text) {
         message: `Unknown action \`${action}\`. Run \`/router help\` for the list.`,
     };
 }
-/** Canonical `provider/model` identity used for pins and display. */
-export function modelRef(model) {
-    return `${model.providerID}/${model.modelID ?? model.id}`;
-}
 function normalize(value) {
     return value.trim().toLowerCase();
 }
@@ -102,7 +98,7 @@ function normalize(value) {
  */
 export function findModel(models, ref) {
     const wanted = normalize(ref);
-    const byQualified = models.filter((model) => normalize(modelRef(model)) === wanted);
+    const byQualified = models.filter((model) => normalize(model.target) === wanted);
     if (byQualified.length > 0)
         return byQualified[0];
     const byBare = models.filter((model) => normalize(model.id) === wanted ||
@@ -116,7 +112,7 @@ export function countMatches(models, ref) {
     const wanted = normalize(ref);
     return models.filter((model) => normalize(model.id) === wanted ||
         (model.modelID !== undefined && normalize(model.modelID) === wanted) ||
-        normalize(modelRef(model)) === wanted).length;
+        normalize(model.target) === wanted);
 }
 function formatDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));
@@ -156,14 +152,14 @@ export function formatStatus(view) {
             if (pin) {
                 // A pin that no longer resolves would otherwise look identical to a
                 // satisfied one, which is the kind of thing that goes unnoticed for days.
-                notes.push(normalize(modelRef(model)) === normalize(pin)
+                notes.push(normalize(model.target) === normalize(pin)
                     ? "pinned"
                     : `pin \`${pin}\` unavailable, routed instead`);
             }
             if (view.authBlocked.some(([provider]) => provider === model.providerID)) {
                 notes.push("auth blocked");
             }
-            lines.push(`| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`);
+            lines.push(`| \`${agent}\` | \`${model.target}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`);
         }
     }
     lines.push("");
@@ -206,7 +202,7 @@ export function formatUsable(view) {
         const seen = model.lastProbeAt === undefined
             ? ""
             : ` · ${model.successes} ok / ${model.failures} failed`;
-        lines.push(`| \`${modelRef(model)}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`);
+        lines.push(`| \`${model.target}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`);
     }
     return lines.join("\n");
 }

@@ -114,13 +114,6 @@ export function parseCommand(text: string): ParsedCommand {
   };
 }
 
-/** Canonical `provider/model` identity used for pins and display. */
-export function modelRef(
-  model: Pick<DiscoveredModel, "providerID" | "id" | "modelID">,
-): string {
-  return `${model.providerID}/${model.modelID ?? model.id}`;
-}
-
 function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -137,7 +130,7 @@ export function findModel(
   const wanted = normalize(ref);
 
   const byQualified = models.filter(
-    (model) => normalize(modelRef(model)) === wanted,
+    (model) => normalize(model.target) === wanted,
   );
   if (byQualified.length > 0) return byQualified[0];
 
@@ -155,14 +148,14 @@ export function findModel(
 export function countMatches(
   models: readonly DiscoveredModel[],
   ref: string,
-): number {
+): DiscoveredModel[] {
   const wanted = normalize(ref);
   return models.filter(
     (model) =>
       normalize(model.id) === wanted ||
       (model.modelID !== undefined && normalize(model.modelID) === wanted) ||
-      normalize(modelRef(model)) === wanted,
-  ).length;
+      normalize(model.target) === wanted,
+  );
 }
 
 export interface StatusView {
@@ -239,7 +232,7 @@ export function formatStatus(view: StatusView): string {
         // A pin that no longer resolves would otherwise look identical to a
         // satisfied one, which is the kind of thing that goes unnoticed for days.
         notes.push(
-          normalize(modelRef(model)) === normalize(pin)
+          normalize(model.target) === normalize(pin)
             ? "pinned"
             : `pin \`${pin}\` unavailable, routed instead`,
         );
@@ -251,7 +244,7 @@ export function formatStatus(view: StatusView): string {
       }
 
       lines.push(
-        `| \`${agent}\` | \`${modelRef(model)}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
+        `| \`${agent}\` | \`${model.target}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
       );
     }
   }
@@ -318,7 +311,7 @@ export function formatUsable(view: StatusView): string {
         ? ""
         : ` · ${model.successes} ok / ${model.failures} failed`;
     lines.push(
-      `| \`${modelRef(model)}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`,
+      `| \`${model.target}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`,
     );
   }
 

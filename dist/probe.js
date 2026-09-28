@@ -55,7 +55,7 @@ function classify(status, detail) {
 const hasError = (reply) => {
     return /error/i.test(reply);
 };
-export async function probeModel(model, providerID, options) {
+export async function probeModel(model, options) {
     const started = Date.now();
     let timer;
     try {
@@ -63,7 +63,7 @@ export async function probeModel(model, providerID, options) {
         // here and the loser's result is dropped.
         const call = options.generate({
             prompt: PROMPT,
-            model: { providerID, id: model.modelID ?? model.id },
+            model: { providerID: model.providerID, id: model.modelID ?? model.id },
         });
         const timeout = new Promise((_resolve, reject) => {
             timer = setTimeout(() => reject(new Error(`probe timed out after ${options.timeoutMs}ms`)), options.timeoutMs);
