@@ -57,6 +57,15 @@ export function parseCommand(text) {
         }
         return { kind: "debug", modelRef: rest.join(" ") };
     }
+    if (verb === "probe" || verb === "ping") {
+        if (rest.length === 0) {
+            return {
+                kind: "error",
+                message: `\`${verb}\` takes a model reference: \`/router probe provider/model-id\``,
+            };
+        }
+        return { kind: "probe", modelRef: rest.join(" ") };
+    }
     if (verb === "pin") {
         if (rest[0] === "--clear" || rest[0] === "clear")
             return { kind: "unpin-all" };
@@ -212,6 +221,8 @@ export const HELP_TEXT = [
     "| `/router pin <agent> <model>` | force one agent onto one model |",
     "| `/router unpin <agent>` | drop one pin |",
     "| `/router unpin` | drop every pin |",
+    "| `/router debug <model>` | show one model's capabilities and score breakdown |",
+    "| `/router probe <model>` | ping one model now and report the raw result |",
     "",
     "Pins live in memory for this session only and are lost on restart. For a",
     "permanent change, set `presets` in the plugin options or point the agent at",

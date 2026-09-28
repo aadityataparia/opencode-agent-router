@@ -560,6 +560,47 @@ ${text}
                         ].join("\n"));
                     return;
                 }
+                case "probe": {
+                    const target = findModel(catalog, parsed.modelRef);
+                    if (!target) {
+                        const matches = countMatches(catalog, parsed.modelRef);
+                        await say(matches > 1
+                            ? `\`${parsed.modelRef}\` matches ${matches} models.`
+                            : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`);
+                        return;
+                    }
+                    // Forced and unconditional: a user asking now is asking past the probe
+                    // cache and past any cooldown. Deliberately not recorded, so diagnosing
+                    // a model cannot move routing underneath the user.
+                    const result = await probeModel(target, target.providerID, {
+                        generate: ctx.generate.text,
+                        timeoutMs: config.probeTimeoutMs,
+                    });
+                    const detail = [
+                        `**probe \`${modelRef(target)}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,
+                    ];
+                    if (result.status !== undefined)
+                        detail.push(`status: ${result.status}`);
+                    if (result.error)
+                        detail.push(`error: ${result.error}`);
+                    detail.push(`reply: ${result.reply ? JSON.stringify(result.reply) : "(none)"}`);
+                    const hint = {
+                        ok: `The endpoint answered with reply: ${result.reply}`,
+                        unusable: `Error in probing. Status: ${result.status}, Error: ${result.error}`,
+                        unauthorized: "The credential was rejected. Reconnect with `opencode auth login`.",
+                        inconclusive: "Rate limited, try again after some time.",
+                    };
+                    await say([
+                        ...detail,
+                        "",
+                        hint[result.verdict],
+                        "",
+                        `Health and latency are unchanged: ${target.health.toFixed(2)}` +
+                            `, ${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}` +
+                            `. Use \`/router refresh\` to record probes into routing.`,
+                    ].join("\n"));
+                    return;
+                }
                 case "unpin-all": {
                     const count = pins.size;
                     if (count === 0) {

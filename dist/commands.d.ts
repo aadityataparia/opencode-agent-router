@@ -29,6 +29,9 @@ export type ParsedCommand = {
 } | {
     kind: "debug";
     modelRef: string;
+} | {
+    kind: "probe";
+    modelRef: string;
 };
 export declare function parseCommand(text: string): ParsedCommand;
 /** Canonical `provider/model` identity used for pins and display. */
