@@ -139,3 +139,10 @@ export interface RouterConfig {
   /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */
   agents: Record<string, AgentRequirements>;
 }
+
+// Add timer to request
+declare global {
+  interface Request {
+    startTime?: number;
+  }
+}

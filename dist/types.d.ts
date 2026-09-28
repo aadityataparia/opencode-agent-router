@@ -79,4 +79,9 @@ export interface RouterConfig {
     /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */
     agents: Record<string, AgentRequirements>;
 }
+declare global {
+    interface Request {
+        startTime?: number;
+    }
+}
 export {};

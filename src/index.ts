@@ -48,6 +48,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     const config = loadConfig(ctx.options);
     const health = new HealthStore();
     const router = new Router(health);
+    const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
 
     let timer: ReturnType<typeof setInterval> | undefined;
     let refreshing = false;
@@ -213,7 +214,6 @@ export const OpenCodeAgentRouter = Plugin.define({
       const routable = models;
 
       const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
-      const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
       /** providerID -> models rejected for auth on this pass. */
       const unauthorized = new Map<string, number>();
       /** providerIDs that answered this pass, so a recovered one can be cleared. */
@@ -561,7 +561,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     function usablePool(): DiscoveredModel[] {
       return catalog.filter(
         (model) =>
-          model.successes > 0 &&
+          (config.probe ? model.successes > 0 : true) &&
           !health.isCoolingDown(model) &&
           model.health >= config.minHealth,
       );
@@ -766,6 +766,48 @@ ${text}
     timer = setInterval(() => {
       void applyRouting("periodic-refresh");
     }, config.refreshMs);
+
+    await ctx.session.hook("http.request", (req) => {
+      req.request.startTime = Date.now();
+    });
+
+    await ctx.session.hook("http.response", (req) => {
+      const provider = req.model.providerID;
+      const model = req.model.id;
+      const discovered = catalog.find(
+        (m) => m.id === model && m.providerID === provider,
+      );
+
+      if (!discovered || !req.request.startTime) return;
+
+      health.recordProbe(
+        discovered,
+        {
+          ok: req.response.ok,
+          latencyMs: Date.now() - req.request.startTime,
+        },
+        cooldownMs,
+      );
+    });
+
+    await ctx.session.hook("experimental.ws.receive", (req) => {
+      const provider = req.model.providerID;
+      const model = req.model.id;
+      const discovered = catalog.find(
+        (m) => m.id === model && m.providerID === provider,
+      );
+
+      if (!discovered) return;
+
+      health.recordProbe(
+        discovered,
+        {
+          ok: true,
+          latencyMs: 100,
+        },
+        cooldownMs,
+      );
+    });
 
     // Clear the timer and dispose the transforms when OpenCode unloads or
     // reloads the plugin.

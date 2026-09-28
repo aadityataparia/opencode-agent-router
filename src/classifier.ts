@@ -76,6 +76,8 @@ export function classifyModel(model: any): DiscoveredModel {
   if ((model?.limit?.context ?? 0) >= 100_000) categories.add("long-context");
   categories.add("general");
 
+  model as Model.Info;
+
   return {
     providerID: String(model?.providerID ?? ""),
     id: String(model?.id ?? model?.modelID ?? ""),
