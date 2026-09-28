@@ -110,9 +110,7 @@ export function findModel(models, ref) {
 /** How many models a bare reference is ambiguous between, for a better error. */
 export function countMatches(models, ref) {
     const wanted = normalize(ref);
-    return models.filter((model) => normalize(model.id) === wanted ||
-        (model.modelID !== undefined && normalize(model.modelID) === wanted) ||
-        normalize(model.target) === wanted);
+    return models.filter((model) => model.target.includes(wanted));
 }
 function formatDuration(ms) {
     const seconds = Math.max(0, Math.round(ms / 1000));

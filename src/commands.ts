@@ -150,12 +150,7 @@ export function countMatches(
   ref: string,
 ): DiscoveredModel[] {
   const wanted = normalize(ref);
-  return models.filter(
-    (model) =>
-      normalize(model.id) === wanted ||
-      (model.modelID !== undefined && normalize(model.modelID) === wanted) ||
-      normalize(model.target) === wanted,
-  );
+  return models.filter((model) => model.target.includes(wanted));
 }
 
 export interface StatusView {

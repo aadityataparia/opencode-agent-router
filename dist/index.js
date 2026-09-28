@@ -500,7 +500,7 @@ ${text}
                     if (!target) {
                         const matches = countMatches(catalog, parsed.model);
                         await say(matches.length > 1
-                            ? `\`${parsed.model}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}.`
+                            ? `\`${parsed.model}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}.`
                             : `No model matching \`${parsed.model}\` in the ${catalog.length}-model catalog. Run \`/router refresh\` if the catalog is stale.`);
                         return;
                     }
@@ -533,7 +533,7 @@ ${text}
                     if (!target) {
                         const matches = countMatches(catalog, parsed.modelRef);
                         await say(matches.length > 1
-                            ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
+                            ? `\`${parsed.modelRef}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}`
                             : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`);
                         return;
                     }
@@ -565,7 +565,7 @@ ${text}
                     if (!target) {
                         const matches = countMatches(catalog, parsed.modelRef);
                         await say(matches.length > 1
-                            ? `\`${parsed.modelRef}\` matches ${matches} models - ${matches.map((m) => m.target).join(",")}`
+                            ? `\`${parsed.modelRef}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}`
                             : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`);
                         return;
                     }
