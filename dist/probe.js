@@ -52,6 +52,9 @@ function classify(status, detail) {
     // Everything else means the endpoint will not serve this model.
     return "unusable";
 }
+const hasError = (reply) => {
+    return /error/i.test(reply);
+};
 export async function probeModel(model, providerID, options) {
     const started = Date.now();
     let timer;
@@ -66,7 +69,12 @@ export async function probeModel(model, providerID, options) {
             timer = setTimeout(() => reject(new Error(`probe timed out after ${options.timeoutMs}ms`)), options.timeoutMs);
         });
         const ret = await Promise.race([call, timeout]);
-        return { verdict: "ok", reply: ret.text, latencyMs: Date.now() - started };
+        return {
+            verdict: hasError(ret.text) ? "unusable" : "ok",
+            reply: ret.text,
+            error: ret.text,
+            latencyMs: Date.now() - started,
+        };
     }
     catch (error) {
         const detail = describe(error);

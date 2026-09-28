@@ -91,6 +91,10 @@ function classify(status: number | undefined, detail: string): ProbeVerdict {
   return "unusable";
 }
 
+const hasError = (reply: string) => {
+  return /error/i.test(reply);
+};
+
 export async function probeModel(
   model: Pick<DiscoveredModel, "id" | "modelID">,
   providerID: string,
@@ -116,7 +120,12 @@ export async function probeModel(
 
     const ret = await Promise.race([call, timeout]);
 
-    return { verdict: "ok", reply: ret.text, latencyMs: Date.now() - started };
+    return {
+      verdict: hasError(ret.text) ? "unusable" : "ok",
+      reply: ret.text,
+      error: ret.text,
+      latencyMs: Date.now() - started,
+    };
   } catch (error) {
     const detail = describe(error);
     return {
