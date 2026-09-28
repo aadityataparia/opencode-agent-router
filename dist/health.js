@@ -30,7 +30,8 @@ export class HealthStore {
         current.successes++;
         current.lastSuccessAt = Date.now();
         current.latencyMs = Number.isFinite(current.latencyMs)
-            ? current.latencyMs * 0.8 + latencyMs * 0.2
+            ? (current.latencyMs * (current.successes - 1) + latencyMs) /
+                current.successes
             : latencyMs;
         current.health =
             current.successes + current.failures === 0
