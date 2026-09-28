@@ -207,7 +207,7 @@ export function loadConfig(
   const presets = configured ?? detectPresets();
 
   const config: RouterConfig = {
-    refreshMs: resolve.positiveNumber("refreshMs", 5 * 60_000),
+    refreshMs: resolve.positiveNumber("refreshMs", 60 * 60_000),
     maxFallbacks: Math.max(
       1,
       Math.floor(resolve.positiveNumber("maxFallbacks", 5)),

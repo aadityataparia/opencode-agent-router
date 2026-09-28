@@ -31,7 +31,7 @@ export interface ProbeOptions {
 }
 
 /** Smallest completion that still exercises the full request path. */
-const PROMPT = "ping";
+const PROMPT = "reply with: ok";
 
 /** Pull a numeric HTTP status out of whatever shape the error arrived in. */
 function errorStatus(error: unknown): number | undefined {
