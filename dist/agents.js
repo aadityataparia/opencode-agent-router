@@ -3,7 +3,7 @@ const COMMON_AGENTS = {
         // Master delegator and strategic coordinator.
         weights: {
             cheap: 0.0,
-            fast: 0.05,
+            fast: 0.5,
             reasoning: 1.0,
             coding: 0.8,
             "long-context": 0.9,
@@ -28,7 +28,7 @@ const COMMON_AGENTS = {
     vision: {
         // Optional visual-analysis specialist, for when the orchestrator is not multimodal.
         weights: {
-            cheap: 0.1,
+            cheap: 0.2,
             vision: 1.0,
             "long-context": 0.65,
             fast: 0.6,

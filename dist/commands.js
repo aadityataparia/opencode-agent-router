@@ -51,6 +51,12 @@ export function parseCommand(text) {
             ? { kind: "usable" }
             : { kind: "error", message: `\`usable\` takes no arguments.` };
     }
+    if (verb === "debug") {
+        if (rest.length === 0) {
+            return { kind: "error", message: "`debug` takes a model reference: `/router debug provider/model-id`" };
+        }
+        return { kind: "debug", modelRef: rest.join(" ") };
+    }
     if (verb === "pin") {
         if (rest[0] === "--clear" || rest[0] === "clear")
             return { kind: "unpin-all" };

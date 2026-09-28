@@ -721,6 +721,26 @@ ${text}
           return;
         }
 
+        case "debug": {
+          const target = findModel(catalog, parsed.modelRef);
+          if (!target) {
+            const matches = countMatches(catalog, parsed.modelRef);
+            await say(
+              matches > 1
+                ? `\`${parsed.modelRef}\` matches ${matches} models.`
+                : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`,
+            );
+            return;
+          }
+          const cap = target.capabilities;
+          await say(
+            `**\`${modelRef(target)}\`**  health=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
+            `categories: ${(Array.from(target.categories as Set<string>) || []).join(", ") || "(none)"}\n` +
+            `capabilities: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`,
+          );
+          return;
+        }
+
         case "unpin-all": {
           const count = pins.size;
           if (count === 0) {

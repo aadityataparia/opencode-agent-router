@@ -22,7 +22,8 @@ export type ParsedCommand =
   | { kind: "pin"; agent: string; model: string }
   | { kind: "unpin"; agent: string }
   | { kind: "unpin-all" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  | { kind: "debug"; modelRef: string };
 
 /** Split on whitespace. Model IDs never contain spaces, so quoting buys nothing. */
 function tokenize(text: string): string[] {
@@ -73,6 +74,13 @@ export function parseCommand(text: string): ParsedCommand {
     return rest.length === 0
       ? { kind: "usable" }
       : { kind: "error", message: `\`usable\` takes no arguments.` };
+  }
+
+  if (verb === "debug") {
+    if (rest.length === 0) {
+      return { kind: "error", message: "`debug` takes a model reference: `/router debug provider/model-id`" };
+    }
+    return { kind: "debug", modelRef: rest.join(" ") };
   }
 
   if (verb === "pin") {
