@@ -79,8 +79,11 @@ export const DEFAULT_AGENT_REQ = {
         cheap: 0.5,
     },
 };
-export const yearsFromNow = (time = Date.now()) => {
-    return (Date.now() - time) / (365 * 24 * 60 * 60 * 1000);
+export const scoreRecency = (model) => {
+    const years = model.releasedAt
+        ? (Date.now() - model.releasedAt) / (365 * 24 * 60 * 60 * 1000)
+        : 0;
+    return (10 - years) / 100;
 };
 export const getAgentRequirements = (agent, additionals = {}) => {
     return {
@@ -96,7 +99,7 @@ export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
         cost: costScore(model),
         context: contextScore(model, req),
         capabilities: capabilityScore(model, req),
-        recency: yearsFromNow(model.releasedAt) * 0.2,
+        recency: scoreRecency(model),
     };
     // Latency, cost and context already sit inside `breakdown.category` via the
     // fast / cheap / long-context weights, so adding them again would count them

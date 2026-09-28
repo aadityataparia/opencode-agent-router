@@ -19,7 +19,6 @@ import {
   getAgentRequirements,
   satisfies,
   scoreModel,
-  yearsFromNow,
 } from "./scorer";
 import { Router } from "./router";
 import {
