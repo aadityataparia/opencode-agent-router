@@ -65,6 +65,7 @@ export interface Candidate {
         cost: number;
         context: number;
         capabilities: number;
+        recency: number;
     };
 }
 export interface RouterConfig {

@@ -14,7 +14,7 @@ export function satisfies(model, req) {
 function latencyScore(model) {
     if (!Number.isFinite(model.latencyMs))
         return 0.5;
-    return 1 / (1 + model.latencyMs / 1000);
+    return (1 / (1 + model.latencyMs / 1000) + (model.categories.has("fast") ? 0.5 : 0));
 }
 function costScore(model) {
     const input = (model.cost.input ?? 0) * 2 + (model.cost.output ?? 0);
@@ -45,7 +45,7 @@ function categoryScore(model, req) {
         let value;
         switch (category) {
             case "fast":
-                value = latencyScore(model) + (model.categories.has("fast") ? 0.5 : 0);
+                value = latencyScore(model);
                 break;
             case "cheap":
                 value = costScore(model);
@@ -68,9 +68,8 @@ function capabilityScore(model, req) {
     const checks = [
         req.tools == null ? null : model.capabilities.tools === req.tools,
     ].filter((x) => x !== null);
-    return checks.length === 0
-        ? 1
-        : checks.filter(Boolean).length / checks.length;
+    return (0.1 *
+        (checks.length === 0 ? 1 : checks.filter(Boolean).length / checks.length));
 }
 export const DEFAULT_AGENT_REQ = {
     weights: {
@@ -80,7 +79,7 @@ export const DEFAULT_AGENT_REQ = {
         cheap: 0.5,
     },
 };
-const yearsFromNow = (time = Date.now()) => {
+export const yearsFromNow = (time = Date.now()) => {
     return (Date.now() - time) / (365 * 24 * 60 * 60 * 1000);
 };
 export const getAgentRequirements = (agent, additionals = {}) => {
@@ -97,13 +96,12 @@ export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
         cost: costScore(model),
         context: contextScore(model, req),
         capabilities: capabilityScore(model, req),
+        recency: yearsFromNow(model.releasedAt) * 0.2,
     };
     // Latency, cost and context already sit inside `breakdown.category` via the
     // fast / cheap / long-context weights, so adding them again would count them
     // twice and let them outweigh the categories they are meant to inform.
-    const score = breakdown.category +
-        yearsFromNow(model.releasedAt) * 0.2 +
-        0.1 * breakdown.capabilities;
+    const score = breakdown.category + breakdown.recency + breakdown.capabilities;
     return { score, breakdown };
 };
 export function findCandidates(agent, models, additionals, minHeadlth = 0) {

@@ -14,7 +14,13 @@ import {
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
-import { findCandidates, getAgentRequirements, satisfies } from "./scorer";
+import {
+  findCandidates,
+  getAgentRequirements,
+  satisfies,
+  scoreModel,
+  yearsFromNow,
+} from "./scorer";
 import { Router } from "./router";
 import {
   AGENT_NAMES,
@@ -421,6 +427,7 @@ export const OpenCodeAgentRouter = Plugin.define({
             category: 0,
             health: 0,
             latency: 0,
+            recency: 0,
             cost: 0,
             context: 0,
             capabilities: 0,
@@ -735,11 +742,28 @@ ${text}
             );
             return;
           }
+          const score = scoreModel(
+            target,
+            getAgentRequirements(curSession.agent as AgentName, config.agents),
+          );
           const cap = target.capabilities;
+          const b = score.breakdown;
+          const term = (label: string, value: number, counts: boolean) =>
+            `  ${label.padEnd(12)} ${value.toFixed(3)}${counts ? "" : "  (informational)"}`;
           await say(
             `**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
               `*categories*: ${Array.from(target.categories).join(", ") || "none"}\n` +
-              `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`,
+              `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}\n` +
+              `*score for \`${curSession.agent ?? "?"}\`*: ${score.score.toFixed(3)}\n` +
+              [
+                term("category", b.category, true),
+                term("capabilities", b.capabilities, true),
+                term("recency", b.recency, true),
+                term("health", b.health, false),
+                term("latency", b.latency, false),
+                term("cost", b.cost, false),
+                term("context", b.context, false),
+              ].join("\n"),
           );
           return;
         }

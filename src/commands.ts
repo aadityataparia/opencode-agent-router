@@ -1,10 +1,5 @@
 import { scoreModel } from "./scorer";
-import type {
-  AgentRequirements,
-  Candidate,
-  DiscoveredModel,
-  RouterConfig,
-} from "./types";
+import type { Candidate, DiscoveredModel, RouterConfig } from "./types";
 
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
