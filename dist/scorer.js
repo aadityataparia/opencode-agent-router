@@ -1,6 +1,6 @@
 import { AGENT_REQUIREMENTS } from "./agents";
 import { MODEL_CATEGORIES, } from "./types";
-function satisfies(model, req) {
+export function satisfies(model, req) {
     if (req.minContext && model.context < req.minContext)
         return false;
     if ((req.weights.vision ?? 0) > 0 && !model.capabilities.vision)

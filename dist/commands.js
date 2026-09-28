@@ -1,4 +1,3 @@
-import { scoreModel } from "./scorer";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -47,13 +46,14 @@ export function parseCommand(text) {
     if (verb === "reset")
         return { kind: "unpin-all" };
     if (verb === "usable" || verb === "models" || verb === "pool") {
-        return rest.length === 0
-            ? { kind: "usable" }
-            : { kind: "error", message: `\`usable\` takes no arguments.` };
+        return { kind: "usable", filter: rest.join(" ") };
     }
     if (verb === "debug") {
         if (rest.length === 0) {
-            return { kind: "error", message: "`debug` takes a model reference: `/router debug provider/model-id`" };
+            return {
+                kind: "error",
+                message: "`debug` takes a model reference: `/router debug provider/model-id`",
+            };
         }
         return { kind: "debug", modelRef: rest.join(" ") };
     }
@@ -180,11 +180,7 @@ export function formatStatus(view) {
 /** The pool a routing pass can choose from, for `/router usable`. */
 export function formatUsable(view) {
     const lines = [];
-    const pool = [...view.pool].sort((a, b) => {
-        if (b.health !== a.health)
-            return b.health - a.health;
-        return modelRef(a).localeCompare(modelRef(b));
-    });
+    const pool = [...view.pool].sort((a, b) => b.score - a.score);
     if (pool.length === 0) {
         return [
             "No models are routable right now.",
@@ -194,13 +190,7 @@ export function formatUsable(view) {
         ].join("\n");
     }
     lines.push(`**${pool.length} model(s) routable** · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`, "", `| model | health | score (for ${view.currentAgent}) | latency |`, "| --- | --- | --- | --- |");
-    const sortedPool = pool
-        .map((p) => ({
-        model: p,
-        score: scoreModel(p, view.currentAgentReq).score,
-    }))
-        .sort((a, b) => b.score - a.score);
-    for (const { model, score } of sortedPool) {
+    for (const { model, score } of pool) {
         const latency = Number.isFinite(model.latencyMs) && model.latencyMs > 0
             ? `${model.latencyMs.toFixed(0)}ms`
             : "—";

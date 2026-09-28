@@ -1,4 +1,5 @@
 import type { DiscoveredModel } from "./types";
+import { Context } from "@opencode/plugin/promise/plugin";
 /**
  * Probes go through OpenCode's own generate API, so they use the real endpoint,
  * SDK and credentials — the only check that reflects request time, and the only
@@ -18,20 +19,9 @@ export interface ProbeResult {
     readonly status?: number;
     readonly error?: string;
 }
-/** Runs one completion against a specific provider's model. */
-export type GenerateText = (input: {
-    readonly prompt: string;
-    readonly model: {
-        readonly id: string;
-        readonly providerID: string;
-        readonly variant?: string;
-    };
-}) => Promise<{
-    readonly text: string;
-}>;
 export interface ProbeOptions {
     /** OpenCode's generate call, which resolves the endpoint and credentials. */
-    readonly generate: GenerateText;
+    readonly generate: Context["generate"]["text"];
     readonly timeoutMs: number;
 }
 export declare function probeModel(model: Pick<DiscoveredModel, "id" | "modelID">, providerID: string, options: ProbeOptions): Promise<ProbeResult>;

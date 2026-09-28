@@ -14,7 +14,7 @@ import {
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
-import { findCandidates, getAgentRequirements } from "./scorer";
+import { findCandidates, getAgentRequirements, satisfies } from "./scorer";
 import { Router } from "./router";
 import {
   AGENT_NAMES,
@@ -370,7 +370,6 @@ export const OpenCodeAgentRouter = Plugin.define({
       fullCatalog: DiscoveredModel[],
     ): Promise<Map<AgentName, Candidate>> {
       const assignments = new Map<AgentName, Candidate>();
-      const userDefinedAgents = config.agents;
       const presetAgents = new Set(presetAgentNames(config.presets));
       const routedAgents = routedAgentNames();
 
@@ -386,7 +385,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         const candidates = findCandidates(
           agentName,
           models,
-          userDefinedAgents,
+          config.agents,
           config.minHealth,
         );
 
@@ -548,26 +547,31 @@ export const OpenCodeAgentRouter = Plugin.define({
         lastRun,
         refreshMs: config.refreshMs,
         now,
-        pool: usablePool(),
-        currentAgentReq: getAgentRequirements(
-          agent as AgentName,
-          config.agents,
-        ),
+        pool: usablePool(agent),
         currentAgent: agent,
       });
     }
 
     /** The models a routing pass could pick from, best health first. */
-    function usablePool(): DiscoveredModel[] {
-      return catalog.filter(
-        (model) =>
-          (config.probe ? model.successes > 0 : true) &&
-          !health.isCoolingDown(model) &&
-          model.health >= config.minHealth,
+    function usablePool(agent?: string, filter?: string): Candidate[] {
+      return findCandidates(
+        agent as AgentName,
+        catalog.filter(
+          (model) =>
+            (config.probe ? model.successes > 0 : true) &&
+            !health.isCoolingDown(model) &&
+            satisfies(
+              model,
+              getAgentRequirements(agent as AgentName, config.agents),
+            ) &&
+            model.target.includes(filter || ""),
+        ),
+        config.agents,
+        config.minHealth,
       );
     }
 
-    function renderUsable(agent?: string): string {
+    function renderUsable(agent?: string, filter?: string): string {
       return formatUsable({
         config,
         assignments: currentAssignments,
@@ -575,7 +579,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         routedAgents: routedAgentNames(),
         discovered: catalog.length,
         routable: lastPoolSize,
-        pool: usablePool(),
+        pool: usablePool(agent, filter),
         coolingDown: catalog.filter((model) => health.isCoolingDown(model))
           .length,
         authBlocked: [...authBlocked.entries()].sort(([a], [b]) =>
@@ -584,10 +588,6 @@ export const OpenCodeAgentRouter = Plugin.define({
         lastRun,
         refreshMs: config.refreshMs,
         now: Date.now(),
-        currentAgentReq: getAgentRequirements(
-          agent as AgentName,
-          config.agents,
-        ),
         currentAgent: agent,
       });
     }
@@ -607,7 +607,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         try {
           await ctx.session.synthetic({
             sessionID,
-            text: `Print this message as is:
+            text: `Print this message as is without quotes:
 """
 ${text}
 """`,
@@ -632,7 +632,10 @@ ${text}
 
         case "usable":
           await say(
-            renderUsable(curSession.agent?.replace("model-router/", "")),
+            renderUsable(
+              curSession.agent?.replace("model-router/", ""),
+              parsed.filter,
+            ),
           );
           return;
 
@@ -734,9 +737,9 @@ ${text}
           }
           const cap = target.capabilities;
           await say(
-            `**\`${modelRef(target)}\`**  health=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
-            `categories: ${(Array.from(target.categories as Set<string>) || []).join(", ") || "(none)"}\n` +
-            `capabilities: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`,
+            `**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
+              `*categories*: ${Array.from(target.categories).join(", ") || "none"}\n` +
+              `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`,
           );
           return;
         }

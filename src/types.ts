@@ -88,6 +88,7 @@ export interface DiscoveredModel {
   id: string;
   /** Catalog modelID; may differ from `id` for some providers. */
   modelID?: string;
+  target: string;
   name?: string;
   family?: string;
   context: number;

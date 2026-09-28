@@ -1,4 +1,4 @@
-import type { AgentRequirements, Candidate, DiscoveredModel, RouterConfig } from "./types";
+import type { Candidate, DiscoveredModel, RouterConfig } from "./types";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -13,6 +13,7 @@ export type ParsedCommand = {
     kind: "refresh";
 } | {
     kind: "usable";
+    filter?: string;
 } | {
     kind: "pin";
     agent: string;
@@ -49,12 +50,11 @@ export interface StatusView {
     /** Agents eligible for routing under the active presets. */
     routedAgents: readonly string[];
     currentAgent?: string;
-    currentAgentReq?: AgentRequirements;
     discovered: number;
     /** Models left in the pool after probing. */
     routable: number;
     /** The pool itself, for `/router usable`. */
-    pool: readonly DiscoveredModel[];
+    pool: readonly Candidate[];
     coolingDown: number;
     /** Provider -> models rejected for auth, sticky across passes. */
     authBlocked: readonly (readonly [string, number])[];

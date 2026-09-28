@@ -37,26 +37,24 @@ function contains(text, patterns) {
     return patterns.some((pattern) => text.includes(pattern));
 }
 function inputSupportsVision(model) {
-    const input = model?.capabilities?.input;
+    const input = model.capabilities?.input;
     if (!Array.isArray(input))
         return false;
     return ["image", "video", "pdf"].some((kind) => input.includes(kind));
 }
 export function classifyModel(model) {
-    const text = [model?.id, model?.family]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+    const m = model;
+    const text = [m.id, m.family].filter(Boolean).join(" ").toLowerCase();
     const categories = new Set();
-    const vision = Boolean(model?.capabilities?.vision) ||
+    const vision = Boolean(model.capabilities?.vision) ||
         inputSupportsVision(model) ||
         contains(text, ["vision", "vl", "multimodal"]);
-    const reasoning = Boolean(model?.capabilities?.reasoning) ||
+    const reasoning = Boolean(model.capabilities?.reasoning) ||
         // `reasoningField` on the catalog entry indicates the model emits
         // reasoning content, even when `capabilities.reasoning` is absent.
-        Boolean(model?.compatibility?.reasoningField) ||
+        Boolean(m.compatibility?.reasoningField) ||
         contains(text, REASONING);
-    const tools = Boolean(model?.capabilities?.tools);
+    const tools = Boolean(m.capabilities?.tools);
     if (vision)
         categories.add("vision");
     if (reasoning)
@@ -67,22 +65,22 @@ export function classifyModel(model) {
         categories.add("fast");
     if (contains(text, CHEAP))
         categories.add("cheap");
-    if ((model?.limit?.context ?? 0) >= 100_000)
+    if ((m.limit?.context ?? 0) >= 100_000)
         categories.add("long-context");
     categories.add("general");
-    model;
     return {
-        providerID: String(model?.providerID ?? ""),
-        id: String(model?.id ?? model?.modelID ?? ""),
-        modelID: model?.modelID ?? model?.id,
-        name: model?.name,
-        family: model?.family,
-        context: Number(model?.limit?.context ?? 0),
-        outputLimit: Number(model?.limit?.output ?? 0),
+        providerID: String(m.providerID ?? ""),
+        id: String(m.id ?? m.modelID ?? ""),
+        modelID: m.modelID ?? m.id,
+        target: `${m.providerID}/${m.id ?? m.modelID}`,
+        name: m.name,
+        family: m.family,
+        context: Number(m.limit?.context ?? 0),
+        outputLimit: Number(m.limit?.output ?? 0),
         capabilities: { reasoning, vision, tools },
         cost: {
-            input: typeof model?.cost?.input === "number" ? model.cost.input : undefined,
-            output: typeof model?.cost?.output === "number" ? model.cost.output : undefined,
+            input: typeof m.cost[0]?.input === "number" ? m.cost[0]?.input : undefined,
+            output: typeof m.cost[0]?.output === "number" ? m.cost[0]?.output : undefined,
         },
         categories,
         health: 1,

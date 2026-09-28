@@ -8,7 +8,10 @@ import {
   MODEL_CATEGORIES,
 } from "./types";
 
-function satisfies(model: DiscoveredModel, req: AgentRequirements): boolean {
+export function satisfies(
+  model: DiscoveredModel,
+  req: AgentRequirements,
+): boolean {
   if (req.minContext && model.context < req.minContext) return false;
   if ((req.weights.vision ?? 0) > 0 && !model.capabilities.vision) return false;
   if ((req.weights.reasoning ?? 0) > 0 && !model.capabilities.reasoning)

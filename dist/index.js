@@ -5,7 +5,7 @@ import { countMatches, findModel, formatStatus, formatUsable, HELP_TEXT, modelRe
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
 import { presetAgentNames } from "./presets";
-import { findCandidates, getAgentRequirements } from "./scorer";
+import { findCandidates, getAgentRequirements, satisfies } from "./scorer";
 import { Router } from "./router";
 import { AGENT_NAMES, routerAgentID, } from "./types";
 import { Agent, Model, Plugin, Provider } from "@opencode/plugin";
@@ -274,7 +274,6 @@ export const OpenCodeAgentRouter = Plugin.define({
         }
         async function computeAssignments(models, fullCatalog) {
             const assignments = new Map();
-            const userDefinedAgents = config.agents;
             const presetAgents = new Set(presetAgentNames(config.presets));
             const routedAgents = routedAgentNames();
             const skipped = AGENT_NAMES.filter((name) => !presetAgents.has(name));
@@ -282,7 +281,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 log(config.log, `presets ${config.presets.join(", ") || "(none)"} exclude ${skipped.length} agent(s): ${skipped.join(", ")}`);
             }
             for (const agentName of routedAgents) {
-                const candidates = findCandidates(agentName, models, userDefinedAgents, config.minHealth);
+                const candidates = findCandidates(agentName, models, config.agents, config.minHealth);
                 if (candidates.length === 0) {
                     log(config.log, `no suitable model for ${agentName}; skipping`);
                     continue;
@@ -403,18 +402,18 @@ export const OpenCodeAgentRouter = Plugin.define({
                 lastRun,
                 refreshMs: config.refreshMs,
                 now,
-                pool: usablePool(),
-                currentAgentReq: getAgentRequirements(agent, config.agents),
+                pool: usablePool(agent),
                 currentAgent: agent,
             });
         }
         /** The models a routing pass could pick from, best health first. */
-        function usablePool() {
-            return catalog.filter((model) => (config.probe ? model.successes > 0 : true) &&
+        function usablePool(agent, filter) {
+            return findCandidates(agent, catalog.filter((model) => (config.probe ? model.successes > 0 : true) &&
                 !health.isCoolingDown(model) &&
-                model.health >= config.minHealth);
+                satisfies(model, getAgentRequirements(agent, config.agents)) &&
+                model.target.includes(filter || "")), config.agents, config.minHealth);
         }
-        function renderUsable(agent) {
+        function renderUsable(agent, filter) {
             return formatUsable({
                 config,
                 assignments: currentAssignments,
@@ -422,14 +421,13 @@ export const OpenCodeAgentRouter = Plugin.define({
                 routedAgents: routedAgentNames(),
                 discovered: catalog.length,
                 routable: lastPoolSize,
-                pool: usablePool(),
+                pool: usablePool(agent, filter),
                 coolingDown: catalog.filter((model) => health.isCoolingDown(model))
                     .length,
                 authBlocked: [...authBlocked.entries()].sort(([a], [b]) => a.localeCompare(b)),
                 lastRun,
                 refreshMs: config.refreshMs,
                 now: Date.now(),
-                currentAgentReq: getAgentRequirements(agent, config.agents),
                 currentAgent: agent,
             });
         }
@@ -441,7 +439,7 @@ export const OpenCodeAgentRouter = Plugin.define({
                 try {
                     await ctx.session.synthetic({
                         sessionID,
-                        text: `Print this message as is:
+                        text: `Print this message as is without quotes:
 """
 ${text}
 """`,
@@ -460,7 +458,7 @@ ${text}
                     await say(renderStatus());
                     return;
                 case "usable":
-                    await say(renderUsable(curSession.agent?.replace("model-router/", "")));
+                    await say(renderUsable(curSession.agent?.replace("model-router/", ""), parsed.filter));
                     return;
                 case "error":
                     await say(parsed.message);
@@ -538,9 +536,9 @@ ${text}
                         return;
                     }
                     const cap = target.capabilities;
-                    await say(`**\`${modelRef(target)}\`**  health=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
-                        `categories: ${(Array.from(target.categories) || []).join(", ") || "(none)"}\n` +
-                        `capabilities: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`);
+                    await say(`**\`${modelRef(target)}\`**  \nhealth=${target.health.toFixed(2)}  latency=${Number.isFinite(target.latencyMs) ? target.latencyMs.toFixed(0) + "ms" : "—"}\n` +
+                        `*categories*: ${(Array.from(target.categories) || []).join(", ") || "(none)"}\n` +
+                        `*capabilities*: reasoning=${cap.reasoning} · vision=${cap.vision} · tools=${cap.tools}`);
                     return;
                 }
                 case "unpin-all": {
