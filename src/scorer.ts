@@ -23,7 +23,7 @@ export function satisfies(
 function latencyScore(model: DiscoveredModel): number {
   if (!Number.isFinite(model.latencyMs)) return 0.5;
   return (
-    1 / (1 + model.latencyMs / 10000) +
+    1 / (1 + model.latencyMs / 5_000) +
     (model.categories.has("fast") ? 0.25 : 0)
   );
 }
@@ -87,10 +87,9 @@ function capabilityScore(
     req.tools == null ? null : model.capabilities.tools === req.tools,
   ].filter((x): x is boolean => x !== null);
 
-  return (
-    0.1 *
-    (checks.length === 0 ? 1 : checks.filter(Boolean).length / checks.length)
-  );
+  return checks.length === 0
+    ? 1
+    : checks.filter(Boolean).length / checks.length;
 }
 
 export const DEFAULT_AGENT_REQ: AgentRequirements = {
@@ -106,7 +105,7 @@ export const scoreRecency = (model: DiscoveredModel): number => {
   const years = model.releasedAt
     ? (Date.now() - model.releasedAt) / (365 * 24 * 60 * 60 * 1000)
     : 0;
-  return (10 - years) / 100;
+  return 1 - years / 10;
 };
 
 export const getAgentRequirements = (
@@ -136,7 +135,8 @@ export const scoreModel = (
   // Latency, cost and context already sit inside `breakdown.category` via the
   // fast / cheap / long-context weights, so adding them again would count them
   // twice and let them outweigh the categories they are meant to inform.
-  const score = breakdown.category + breakdown.recency + breakdown.capabilities;
+  const score =
+    breakdown.category + breakdown.recency * 0.1 + breakdown.capabilities * 0.1;
   return { score, breakdown };
 };
 
