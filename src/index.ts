@@ -213,7 +213,7 @@ export const OpenCodeAgentRouter = Plugin.define({
       models: DiscoveredModel[],
       force = false,
     ): Promise<{ models: DiscoveredModel[]; probed: number; usable: number }> {
-      if (!config.probe) return { models, probed: 0, usable: 0 };
+      if (!config.probe && !force) return { models, probed: 0, usable: 0 };
 
       const routable = models;
 
@@ -307,9 +307,9 @@ export const OpenCodeAgentRouter = Plugin.define({
       for (const [provider, count] of unauthorized) {
         authBlocked.set(provider, count);
       }
-      // Cleared only once it answered and nothing on it was rejected.
+      // Cleared if even one model answered
       for (const provider of answered) {
-        if (!unauthorized.has(provider)) authBlocked.delete(provider);
+        authBlocked.delete(provider);
       }
 
       const blocked = [...authBlocked.entries()].sort(([a], [b]) =>
@@ -664,14 +664,16 @@ ${text}
             return;
           }
           // With probing off a refresh is only a re-scan; do not claim a re-probe.
-          const probeNote = config.probe
-            ? ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.`
-            : " Probing is off, so this was a catalog re-scan only — set `probe: true` to also re-validate models.";
+          const probeNote =
+            ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.` +
+            (!config.probe
+              ? " Probing is off, so this was a one-off catalog re-scan — set `probe: true` to run it periodically."
+              : "");
           await say(
             renderStatus() +
               "\n\n" +
               (outcome.status === "changed"
-                ? `Re-scanned${config.probe ? " and re-probed" : ""}. ${outcome.assignments} agent(s) routed.${probeNote}`
+                ? `Re-scanned and re-probed. ${outcome.assignments} agent(s) routed.${probeNote}`
                 : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`),
           );
           return;
