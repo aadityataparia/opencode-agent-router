@@ -17,7 +17,7 @@ function latencyScore(model) {
     return (1 / (1 + model.latencyMs / 1000) + (model.categories.has("fast") ? 0.5 : 0));
 }
 function costScore(model) {
-    const input = (model.cost.input ?? 0) * 2 + (model.cost.output ?? 0);
+    const input = ((model.cost.input ?? 0) * 2 + (model.cost.output ?? 0)) / 10;
     return 1 / (1 + Math.max(0, input));
 }
 function contextScore(model, req) {
