@@ -653,6 +653,8 @@ ${text}
                 ok: req.response.ok,
                 latencyMs: Date.now() - req.request.startTime,
             }, cooldownMs);
+            if (discovered.health < config.minHealth)
+                void applyRouting("response");
         });
         await ctx.session.hook("experimental.ws.receive", (req) => {
             const provider = req.model.providerID;
@@ -664,6 +666,8 @@ ${text}
                 ok: true,
                 latencyMs: 100,
             }, cooldownMs);
+            if (discovered.health < config.minHealth)
+                void applyRouting("response");
         });
         // Clear the timer and dispose the transforms when OpenCode unloads or
         // reloads the plugin.

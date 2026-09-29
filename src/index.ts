@@ -913,6 +913,8 @@ ${text}
         },
         cooldownMs,
       );
+
+      if (discovered.health < config.minHealth) void applyRouting("response");
     });
 
     await ctx.session.hook("experimental.ws.receive", (req) => {
@@ -932,6 +934,8 @@ ${text}
         },
         cooldownMs,
       );
+
+      if (discovered.health < config.minHealth) void applyRouting("response");
     });
 
     // Clear the timer and dispose the transforms when OpenCode unloads or
