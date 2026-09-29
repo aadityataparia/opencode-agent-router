@@ -14,7 +14,8 @@ export function satisfies(model, req) {
 function latencyScore(model) {
     if (!Number.isFinite(model.latencyMs))
         return 0.5;
-    return (1 / (1 + model.latencyMs / 1000) + (model.categories.has("fast") ? 0.5 : 0));
+    return (1 / (1 + model.latencyMs / 10000) +
+        (model.categories.has("fast") ? 0.25 : 0));
 }
 function costScore(model) {
     const input = ((model.cost.input ?? 0) * 2 + (model.cost.output ?? 0)) / 10;
