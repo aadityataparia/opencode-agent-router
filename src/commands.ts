@@ -165,8 +165,8 @@ export interface StatusView {
   discovered: number;
   /** Models left in the pool after probing. */
   routable: number;
-  /** The pool itself, for `/router usable`. */
-  pool: readonly Candidate[];
+  /** The pool itself; only `/router usable` renders it. */
+  pool?: readonly Candidate[];
   coolingDown: number;
   /** Provider -> models rejected for auth, sticky across passes. */
   authBlocked: readonly (readonly [string, number])[];
@@ -278,7 +278,7 @@ export function formatStatus(view: StatusView): string {
 /** The pool a routing pass can choose from, for `/router usable`. */
 export function formatUsable(view: StatusView): string {
   const lines: string[] = [];
-  const pool = [...view.pool].sort((a, b) => b.score - a.score);
+  const pool = [...(view.pool ?? [])].sort((a, b) => b.score - a.score);
 
   if (pool.length === 0) {
     return [

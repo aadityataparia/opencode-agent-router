@@ -96,6 +96,6 @@ export function classifyModel(model: any): DiscoveredModel {
     latencyMs: Infinity,
     failures: 0,
     successes: 0,
-    releasedAt: (model as Model.Info).time.released,
+    releasedAt: m.time.released,
   };
 }

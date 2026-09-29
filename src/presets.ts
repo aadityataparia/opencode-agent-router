@@ -30,35 +30,25 @@ export function isPresetName(value: string): value is PresetName {
   return (PRESET_NAMES as readonly string[]).includes(value);
 }
 
+/** The 11 builtins oh-my-opencode and oh-my-openagent share. */
+const OMO_BUILTIN_AGENTS = [
+  "sisyphus",
+  "hephaestus",
+  "prometheus",
+  "atlas",
+  "oracle",
+  "librarian",
+  "explore",
+  "multimodal-looker",
+  "metis",
+  "momus",
+  "sisyphus-junior",
+];
+
 /** Agents each preset defines; names this router has no requirements for are not routed. */
 export const PRESET_AGENTS: Record<PresetName, readonly string[]> = {
-  "oh-my-opencode": [
-    "sisyphus",
-    "hephaestus",
-    "prometheus",
-    "atlas",
-    "oracle",
-    "librarian",
-    "explore",
-    "multimodal-looker",
-    "metis",
-    "momus",
-    "sisyphus-junior",
-  ],
-  // Same lineage and the same 11 builtin names as oh-my-opencode.
-  "oh-my-openagent": [
-    "sisyphus",
-    "hephaestus",
-    "prometheus",
-    "atlas",
-    "oracle",
-    "librarian",
-    "explore",
-    "multimodal-looker",
-    "metis",
-    "momus",
-    "sisyphus-junior",
-  ],
+  "oh-my-opencode": OMO_BUILTIN_AGENTS,
+  "oh-my-openagent": OMO_BUILTIN_AGENTS,
   "oh-my-opencode-slim": [
     "orchestrator",
     "explorer",
@@ -191,9 +181,4 @@ function unescapeJson(value: string): string {
         return char;
     }
   });
-}
-
-/** Package name each preset ships under, for log messages. */
-export function presetPackage(preset: PresetName): string {
-  return PRESET_PACKAGES[preset];
 }

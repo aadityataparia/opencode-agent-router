@@ -54,8 +54,8 @@ export interface StatusView {
     discovered: number;
     /** Models left in the pool after probing. */
     routable: number;
-    /** The pool itself, for `/router usable`. */
-    pool: readonly Candidate[];
+    /** The pool itself; only `/router usable` renders it. */
+    pool?: readonly Candidate[];
     coolingDown: number;
     /** Provider -> models rejected for auth, sticky across passes. */
     authBlocked: readonly (readonly [string, number])[];

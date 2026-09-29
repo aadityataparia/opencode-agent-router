@@ -183,7 +183,7 @@ export function formatStatus(view) {
 /** The pool a routing pass can choose from, for `/router usable`. */
 export function formatUsable(view) {
     const lines = [];
-    const pool = [...view.pool].sort((a, b) => b.score - a.score);
+    const pool = [...(view.pool ?? [])].sort((a, b) => b.score - a.score);
     if (pool.length === 0) {
         return [
             "No models are routable right now.",

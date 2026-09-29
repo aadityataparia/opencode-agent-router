@@ -33,10 +33,7 @@ export class HealthStore {
             ? (current.latencyMs * (current.successes - 1) + latencyMs) /
                 current.successes
             : latencyMs;
-        current.health =
-            current.successes + current.failures === 0
-                ? 1
-                : current.successes / (current.successes + current.failures);
+        current.health = current.successes / (current.successes + current.failures);
         current.cooldownUntil = undefined;
     }
     failure(model, cooldownMs = 30_000) {
@@ -45,10 +42,7 @@ export class HealthStore {
             return;
         current.failures++;
         current.lastFailureAt = Date.now();
-        current.health =
-            current.successes + current.failures === 0
-                ? 1
-                : current.successes / (current.successes + current.failures);
+        current.health = current.successes / (current.successes + current.failures);
         current.cooldownUntil = Date.now() + cooldownMs;
     }
     isCoolingDown(model) {
@@ -73,9 +67,5 @@ export class HealthStore {
         else {
             this.failure(model, cooldownMs);
         }
-    }
-    successRate(model) {
-        const total = model.successes + model.failures;
-        return total === 0 ? 0.5 : model.successes / total;
     }
 }

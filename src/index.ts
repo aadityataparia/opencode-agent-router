@@ -9,6 +9,7 @@ import {
   HELP_TEXT,
   parseCommand,
   ROUTER_COMMAND,
+  type StatusView,
 } from "./commands";
 import { HealthStore } from "./health";
 import { mapWithConcurrency, probeModel } from "./probe";
@@ -23,6 +24,7 @@ import { Router } from "./router";
 import {
   AGENT_NAMES,
   Candidate,
+  ROUTER_AGENT_PREFIX,
   routerAgentID,
   type AgentName,
   type DiscoveredModel,
@@ -51,7 +53,7 @@ export const OpenCodeAgentRouter = Plugin.define({
     // log at startup rather than on the first refresh.
     const config = loadConfig(ctx.options);
     const health = new HealthStore();
-    const router = new Router(health);
+    const router = new Router();
     const cooldownMs = Math.max(config.probeTimeoutMs * 2, 30_000);
 
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -508,7 +510,7 @@ export const OpenCodeAgentRouter = Plugin.define({
           opts.session &&
           ["pin", "unpin", "unpin-all", "manual"].includes(reason)
         ) {
-          const curAgent = opts.session.agent?.replace("model-router/", "");
+          const curAgent = opts.session.agent?.replace(ROUTER_AGENT_PREFIX, "");
           const selectedModel = curAgent
             ? currentAssignments.get(curAgent as AgentName)
             : undefined;
@@ -536,15 +538,19 @@ export const OpenCodeAgentRouter = Plugin.define({
       }
     }
 
-    function renderStatus(agent?: string): string {
-      const now = Date.now();
-      return formatStatus({
+    function statusView(
+      now: number,
+      agent: string | undefined,
+      pool: readonly Candidate[],
+    ): StatusView {
+      return {
         config,
         assignments: currentAssignments,
         pins,
         routedAgents: routedAgentNames(),
         discovered: catalog.length,
         routable: lastPoolSize,
+        pool,
         coolingDown: catalog.filter((model) => health.isCoolingDown(model))
           .length,
         authBlocked: [...authBlocked.entries()].sort(([a], [b]) =>
@@ -553,9 +559,13 @@ export const OpenCodeAgentRouter = Plugin.define({
         lastRun,
         refreshMs: config.refreshMs,
         now,
-        pool: usablePool(agent),
         currentAgent: agent,
-      });
+      };
+    }
+
+    function renderStatus(agent?: string): string {
+      const now = Date.now();
+      return formatStatus(statusView(now, agent, []));
     }
 
     /** The models a routing pass could pick from, best health first. */
@@ -578,24 +588,8 @@ export const OpenCodeAgentRouter = Plugin.define({
     }
 
     function renderUsable(agent?: string, filter?: string): string {
-      return formatUsable({
-        config,
-        assignments: currentAssignments,
-        pins,
-        routedAgents: routedAgentNames(),
-        discovered: catalog.length,
-        routable: lastPoolSize,
-        pool: usablePool(agent, filter),
-        coolingDown: catalog.filter((model) => health.isCoolingDown(model))
-          .length,
-        authBlocked: [...authBlocked.entries()].sort(([a], [b]) =>
-          a.localeCompare(b),
-        ),
-        lastRun,
-        refreshMs: config.refreshMs,
-        now: Date.now(),
-        currentAgent: agent,
-      });
+      const pool = usablePool(agent, filter);
+      return formatUsable(statusView(Date.now(), agent, pool));
     }
 
     const execute = async ({
@@ -625,6 +619,16 @@ ${text}
           );
         }
       };
+
+      async function explainMissingModel(ref: string): Promise<void> {
+        const matches = countMatches(catalog, ref);
+        await say(
+          matches.length > 1
+            ? `\`${ref}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}`
+            : `No model matching \`${ref}\` in the ${catalog.length}-model catalog.`,
+        );
+      }
+
       const parsed = parseCommand(prompt.text ?? "");
 
       switch (parsed.kind) {
@@ -639,7 +643,7 @@ ${text}
         case "usable":
           await say(
             renderUsable(
-              curSession.agent?.replace("model-router/", ""),
+              curSession.agent?.replace(ROUTER_AGENT_PREFIX, ""),
               parsed.filter,
             ),
           );
@@ -735,12 +739,7 @@ ${text}
         case "debug": {
           const target = findModel(catalog, parsed.modelRef);
           if (!target) {
-            const matches = countMatches(catalog, parsed.modelRef);
-            await say(
-              matches.length > 1
-                ? `\`${parsed.modelRef}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}`
-                : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`,
-            );
+            await explainMissingModel(parsed.modelRef);
             return;
           }
           const score = scoreModel(
@@ -801,12 +800,7 @@ ${text}
         case "probe": {
           const target = findModel(catalog, parsed.modelRef);
           if (!target) {
-            const matches = countMatches(catalog, parsed.modelRef);
-            await say(
-              matches.length > 1
-                ? `\`${parsed.modelRef}\` matches ${matches.length} models - ${matches.map((m) => m.target).join(", ")}`
-                : `No model matching \`${parsed.modelRef}\` in the ${catalog.length}-model catalog.`,
-            );
+            await explainMissingModel(parsed.modelRef);
             return;
           }
 
@@ -859,7 +853,7 @@ ${text}
           // of the cleared ones: clearing a different agent's pin says nothing
           // about which model this session should run on, and forcing one would
           // overwrite a model the user chose by hand.
-          const curAgent = curSession.agent?.replace("model-router/", "");
+          const curAgent = curSession.agent?.replace(ROUTER_AGENT_PREFIX, "");
           const outcome = await applyRouting("unpin-all", {
             session: curAgent && cleared.has(curAgent) ? curSession : undefined,
           });
@@ -892,16 +886,15 @@ ${text}
       void applyRouting("periodic-refresh");
     }, config.refreshMs);
 
+    const findDiscovered = (ref: { providerID: string; id: string }) =>
+      catalog.find((m) => m.id === ref.id && m.providerID === ref.providerID);
+
     await ctx.session.hook("http.request", (req) => {
       req.request.startTime = Date.now();
     });
 
     await ctx.session.hook("http.response", (req) => {
-      const provider = req.model.providerID;
-      const model = req.model.id;
-      const discovered = catalog.find(
-        (m) => m.id === model && m.providerID === provider,
-      );
+      const discovered = findDiscovered(req.model);
 
       if (!discovered || !req.request.startTime) return;
 
@@ -918,11 +911,7 @@ ${text}
     });
 
     await ctx.session.hook("experimental.ws.receive", (req) => {
-      const provider = req.model.providerID;
-      const model = req.model.id;
-      const discovered = catalog.find(
-        (m) => m.id === model && m.providerID === provider,
-      );
+      const discovered = findDiscovered(req.model);
 
       if (!discovered) return;
 

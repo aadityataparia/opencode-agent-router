@@ -1,10 +1,7 @@
 import type { AgentName, Candidate, RoutingStrategy } from "./types";
-import { HealthStore } from "./health";
 
 export class Router {
   private readonly cursors = new Map<AgentName, number>();
-
-  constructor(private readonly health: HealthStore) {}
 
   choose(
     agent: AgentName,

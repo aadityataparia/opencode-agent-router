@@ -135,7 +135,7 @@ class Resolver {
 function envSuffix(key) {
     return key.replace(/[A-Z]/g, (char) => `_${char}`).toUpperCase();
 }
-export function loadConfig(options = {}, log = false) {
+export function loadConfig(options = {}) {
     const resolve = new Resolver(options);
     // Logging is resolved first so everything below can report through the same
     // switch the user set.
@@ -153,7 +153,7 @@ export function loadConfig(options = {}, log = false) {
         presets,
         agents: resolve.agents("agents"),
     };
-    if (log || verbose) {
+    if (verbose) {
         const origin = configured ? resolve.source("presets") : "detected";
         const overridden = Object.entries(config)
             .filter(([key]) => resolve.source(key) !== "default")

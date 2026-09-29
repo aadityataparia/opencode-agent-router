@@ -128,10 +128,11 @@ export async function probeModel(
     };
   } catch (error) {
     const detail = describe(error);
+    const status = errorStatus(error);
     return {
-      verdict: classify(errorStatus(error), detail),
+      verdict: classify(status, detail),
       latencyMs: Date.now() - started,
-      status: errorStatus(error),
+      status,
       error: detail.slice(0, 200),
     };
   } finally {

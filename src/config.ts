@@ -193,10 +193,7 @@ function envSuffix(key: string): string {
   return key.replace(/[A-Z]/g, (char) => `_${char}`).toUpperCase();
 }
 
-export function loadConfig(
-  options: PluginOptions = {},
-  log = false,
-): RouterConfig {
+export function loadConfig(options: PluginOptions = {}): RouterConfig {
   const resolve = new Resolver(options);
 
   // Logging is resolved first so everything below can report through the same
@@ -221,13 +218,11 @@ export function loadConfig(
     agents: resolve.agents("agents"),
   };
 
-  if (log || verbose) {
+  if (verbose) {
     const origin = configured ? resolve.source("presets") : "detected";
     const overridden = Object.entries(config)
-      .filter(
-        ([key]) => resolve.source(key as keyof RouterConfig) !== "default",
-      )
-      .map(([key]) => `${key}(${resolve.source(key as keyof RouterConfig)})`)
+      .filter(([key]) => resolve.source(key) !== "default")
+      .map(([key]) => `${key}(${resolve.source(key)})`)
       .join(" ");
 
     warn(

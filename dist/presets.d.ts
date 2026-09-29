@@ -19,5 +19,3 @@ export declare function presetAgentNames(presets: readonly PresetName[]): string
  * what this exists to prevent. Inconclusive detection returns every preset.
  */
 export declare function detectPresets(): PresetName[];
-/** Package name each preset ships under, for log messages. */
-export declare function presetPackage(preset: PresetName): string;

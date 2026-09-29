@@ -66,14 +66,13 @@ function categoryScore(model, req) {
     return maxWeight === 0 ? 0 : score / maxWeight;
 }
 function capabilityScore(model, req) {
-    const checks = [
-        req.tools == null ? null : model.capabilities.tools === req.tools,
-    ].filter((x) => x !== null);
-    return checks.length === 0
-        ? 1
-        : checks.filter(Boolean).length / checks.length;
+    // One check today. An agent that does not state a preference is never
+    // penalised for it, which is what the empty-result case meant.
+    if (req.tools == null)
+        return 1;
+    return model.capabilities.tools === req.tools ? 1 : 0;
 }
-export const DEFAULT_AGENT_REQ = {
+const DEFAULT_AGENT_REQ = {
     weights: {
         "long-context": 0.5,
         reasoning: 0.5,
@@ -81,7 +80,7 @@ export const DEFAULT_AGENT_REQ = {
         cheap: 0.5,
     },
 };
-export const scoreRecency = (model) => {
+const scoreRecency = (model) => {
     const years = model.releasedAt
         ? (Date.now() - model.releasedAt) / (365 * 24 * 60 * 60 * 1000)
         : 0;

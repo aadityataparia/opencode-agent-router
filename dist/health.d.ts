@@ -13,5 +13,4 @@ export declare class HealthStore {
         ok: boolean;
         latencyMs: number;
     }, cooldownMs: number): void;
-    successRate(model: DiscoveredModel): number;
 }

@@ -7,4 +7,4 @@ import type { RouterConfig } from "./types";
  */
 /** The `ctx.options` object the host passes to `setup`. */
 export type PluginOptions = Readonly<Record<string, unknown>>;
-export declare function loadConfig(options?: PluginOptions, log?: boolean): RouterConfig;
+export declare function loadConfig(options?: PluginOptions): RouterConfig;

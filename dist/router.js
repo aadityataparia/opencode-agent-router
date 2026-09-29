@@ -1,9 +1,5 @@
 export class Router {
-    health;
     cursors = new Map();
-    constructor(health) {
-        this.health = health;
-    }
     choose(agent, candidates, strategy) {
         if (candidates.length === 0)
             return undefined;
