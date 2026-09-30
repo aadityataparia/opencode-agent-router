@@ -1,3 +1,4 @@
+import { isRoutingStrategy, STRATEGY_NAMES } from "./config";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -29,6 +30,29 @@ export function parseCommand(text) {
         return rest.length === 0
             ? { kind: "refresh" }
             : { kind: "error", message: `\`refresh\` takes no arguments.` };
+    }
+    if (verb === "strategy" || verb === "presets") {
+        const valid = STRATEGY_NAMES.join(", ");
+        if (rest.length === 0) {
+            return {
+                kind: "error",
+                message: `\`strategy\` takes one strategy: \`/router strategy latency\`. Valid: ${valid}.`,
+            };
+        }
+        if (rest.length > 1) {
+            return {
+                kind: "error",
+                message: `\`strategy\` takes exactly one strategy; got ${rest.length} arguments.`,
+            };
+        }
+        const wanted = rest[0].trim().toLowerCase();
+        if (!isRoutingStrategy(wanted)) {
+            return {
+                kind: "error",
+                message: `Unknown strategy \`${rest[0]}\`. Valid: ${valid}.`,
+            };
+        }
+        return { kind: "strategy", strategy: wanted };
     }
     if (verb === "help" || verb === "?")
         return { kind: "help" };
@@ -212,6 +236,7 @@ export const HELP_TEXT = [
     "| `/router` | show routing status |",
     "| `/router usable` | list every model the router can currently pick |",
     "| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |",
+    "| `/router strategy <name>` | switch routing strategy and re-route now (session-only) |",
     "| `/router pin <agent> <model>` | force one agent onto one model |",
     "| `/router unpin <agent>` | drop one pin |",
     "| `/router unpin` | drop every pin |",

@@ -685,6 +685,38 @@ ${text}
           return;
         }
 
+        case "strategy": {
+          const previous = config.strategy;
+          config.strategy = parsed.strategy;
+
+          // Forced, for the same reason a manual refresh is: the user just asked
+          // for a different pick, so a cached answer would hide the change.
+          const outcome = await applyRouting("manual", {
+            force: true,
+            session: curSession,
+          });
+          if (outcome.status === "busy") {
+            await say("A refresh is already running; try again in a moment.");
+            return;
+          }
+          if (outcome.status === "failed") {
+            await say(
+              `Strategy set to \`${parsed.strategy}\`, but re-routing failed; the published aliases were left untouched. See the log.`,
+            );
+            return;
+          }
+
+          // Session-only, like a pin: the plugin options are untouched, so the
+          // next start returns to whatever the user configured.
+          await say(
+            `Strategy ${previous === parsed.strategy ? "was already" : "now"} \`${parsed.strategy}\`${
+              previous === parsed.strategy ? "" : ` (was \`${previous}\`)`
+            }. Session-only; your plugin options still say \`${previous}\`.\n\n` +
+              renderStatus(),
+          );
+          return;
+        }
+
         case "pin": {
           const agents = routedAgentNames();
           if (!agents.includes(parsed.agent as AgentName)) {
@@ -813,6 +845,14 @@ ${text}
             generate: ctx.generate.text,
             timeoutMs: config.probeTimeoutMs,
           });
+
+          if (result.verdict !== "inconclusive") {
+            health.recordProbe(
+              target,
+              { ok: result.verdict === "ok", latencyMs: result.latencyMs },
+              cooldownMs,
+            );
+          }
 
           const detail: string[] = [
             `**probe \`${target.target}\`** — \`${result.verdict}\` in ${result.latencyMs}ms`,

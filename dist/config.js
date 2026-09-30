@@ -1,11 +1,15 @@
 import { detectPresets, PRESET_NAMES } from "./presets";
-const strategies = new Set([
-    "round-robin",
-    "weighted",
+/** Every strategy the router can be asked for, in the order they are offered. */
+export const STRATEGY_NAMES = [
+    "adaptive",
     "latency",
     "cost",
-    "adaptive",
-]);
+    "weighted",
+    "round-robin",
+];
+export function isRoutingStrategy(value) {
+    return STRATEGY_NAMES.includes(value);
+}
 const ENV_PREFIX = "OCO_ROUTER_";
 function warn(message) {
     // console.error so diagnostics surface in `--print-logs` output.
@@ -89,11 +93,11 @@ class Resolver {
         if (value === undefined)
             return fallback;
         const text = String(value).trim().toLowerCase();
-        if (strategies.has(text)) {
+        if (isRoutingStrategy(text)) {
             this.note(key, source);
             return text;
         }
-        warn(`ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${[...strategies].join(", ")}`);
+        warn(`ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${STRATEGY_NAMES.join(", ")}`);
         return fallback;
     }
     /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */

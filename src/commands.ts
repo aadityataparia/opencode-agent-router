@@ -1,4 +1,10 @@
-import type { Candidate, DiscoveredModel, RouterConfig } from "./types";
+import { isRoutingStrategy, STRATEGY_NAMES } from "./config";
+import type {
+  Candidate,
+  DiscoveredModel,
+  RouterConfig,
+  RoutingStrategy,
+} from "./types";
 
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
@@ -12,6 +18,7 @@ export type ParsedCommand =
   | { kind: "status" }
   | { kind: "help" }
   | { kind: "refresh" }
+  | { kind: "strategy"; strategy: RoutingStrategy }
   | { kind: "usable"; filter?: string }
   | { kind: "pin"; agent: string; model: string }
   | { kind: "unpin"; agent: string }
@@ -48,6 +55,30 @@ export function parseCommand(text: string): ParsedCommand {
     return rest.length === 0
       ? { kind: "refresh" }
       : { kind: "error", message: `\`refresh\` takes no arguments.` };
+  }
+
+  if (verb === "strategy" || verb === "presets") {
+    const valid = STRATEGY_NAMES.join(", ");
+    if (rest.length === 0) {
+      return {
+        kind: "error",
+        message: `\`strategy\` takes one strategy: \`/router strategy latency\`. Valid: ${valid}.`,
+      };
+    }
+    if (rest.length > 1) {
+      return {
+        kind: "error",
+        message: `\`strategy\` takes exactly one strategy; got ${rest.length} arguments.`,
+      };
+    }
+    const wanted = rest[0].trim().toLowerCase();
+    if (!isRoutingStrategy(wanted)) {
+      return {
+        kind: "error",
+        message: `Unknown strategy \`${rest[0]}\`. Valid: ${valid}.`,
+      };
+    }
+    return { kind: "strategy", strategy: wanted };
   }
 
   if (verb === "help" || verb === "?") return { kind: "help" };
@@ -321,6 +352,7 @@ export const HELP_TEXT = [
   "| `/router` | show routing status |",
   "| `/router usable` | list every model the router can currently pick |",
   "| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |",
+  "| `/router strategy <name>` | switch routing strategy and re-route now (session-only) |",
   "| `/router pin <agent> <model>` | force one agent onto one model |",
   "| `/router unpin <agent>` | drop one pin |",
   "| `/router unpin` | drop every pin |",

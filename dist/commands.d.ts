@@ -1,4 +1,4 @@
-import type { Candidate, DiscoveredModel, RouterConfig } from "./types";
+import type { Candidate, DiscoveredModel, RouterConfig, RoutingStrategy } from "./types";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -11,6 +11,9 @@ export type ParsedCommand = {
     kind: "help";
 } | {
     kind: "refresh";
+} | {
+    kind: "strategy";
+    strategy: RoutingStrategy;
 } | {
     kind: "usable";
     filter?: string;

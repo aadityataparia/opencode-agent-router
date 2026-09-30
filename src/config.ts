@@ -11,13 +11,20 @@ import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
 /** The `ctx.options` object the host passes to `setup`. */
 export type PluginOptions = Readonly<Record<string, unknown>>;
 
-const strategies: Set<RoutingStrategy> = new Set([
-  "round-robin",
-  "weighted",
+/** Every strategy the router can be asked for, in the order they are offered. */
+export const STRATEGY_NAMES = [
+  "adaptive",
   "latency",
   "cost",
-  "adaptive",
-]);
+  "weighted",
+  "round-robin",
+] as const satisfies readonly RoutingStrategy[];
+
+export function isRoutingStrategy(
+  value: string,
+): value is RoutingStrategy {
+  return (STRATEGY_NAMES as readonly string[]).includes(value);
+}
 
 /** Where a resolved value came from, for the startup summary. */
 type Source = "env" | "config" | "default";
@@ -128,14 +135,14 @@ class Resolver {
     const { value, source } = this.raw(key);
     if (value === undefined) return fallback;
 
-    const text = String(value).trim().toLowerCase() as RoutingStrategy;
-    if (strategies.has(text)) {
+    const text = String(value).trim().toLowerCase();
+    if (isRoutingStrategy(text)) {
       this.note(key, source);
       return text;
     }
 
     warn(
-      `ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${[...strategies].join(", ")}`,
+      `ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${STRATEGY_NAMES.join(", ")}`,
     );
     return fallback;
   }
