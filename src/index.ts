@@ -217,10 +217,6 @@ export const OpenCodeAgentRouter = Plugin.define({
       models: DiscoveredModel[],
       force = false,
     ): Promise<{ models: DiscoveredModel[]; probed: number; usable: number }> {
-      if (!config.probe && !force) return { models, probed: 0, usable: 0 };
-
-      const routable = models;
-
       const ttlMs = config.refreshMs * PROBE_TTL_REFRESHES;
       /** providerID -> models rejected for auth on this pass. */
       const unauthorized = new Map<string, number>();
@@ -228,9 +224,17 @@ export const OpenCodeAgentRouter = Plugin.define({
       const answered = new Set<string>();
 
       const results = await mapWithConcurrency(
-        routable,
+        models,
         PROBE_CONCURRENCY,
         async (model) => {
+          if (!config.probe && !force) {
+            return {
+              model,
+              usable: model.probeResult,
+              probed: false,
+            };
+          }
+
           const ref = model.target;
 
           // One model's failure must not void the batch: `mapWithConcurrency`
@@ -283,11 +287,13 @@ export const OpenCodeAgentRouter = Plugin.define({
                     : `probe ${ref} ${result.verdict} (${result.status ?? "network"}): ${result.error}`),
             );
 
+            model.probeResult =
+              result.verdict === "ok" || result.verdict === "inconclusive";
+
             // A rejected credential excludes the model; only a throttle keeps it in.
             return {
               model,
-              usable:
-                result.verdict === "ok" || result.verdict === "inconclusive",
+              usable: model.probeResult,
               probed: true,
             };
           } catch (error) {
@@ -302,7 +308,7 @@ export const OpenCodeAgentRouter = Plugin.define({
         },
       );
 
-      const usable = results.filter((result) => result.usable);
+      const usable = models.filter((m) => m.probeResult);
       const stats = {
         probed: results.filter((result) => result.probed).length,
         usable: usable.length,
@@ -342,23 +348,23 @@ export const OpenCodeAgentRouter = Plugin.define({
 
       // Everything failing points at the endpoint, not the catalog: keep the
       // catalog for this pass rather than emptying the pool.
-      if (usable.length === 0 && routable.length > 0) {
+      if (usable.length === 0 && models.length > 0) {
         console.error(
-          `[opencode-agent-router] probe found no usable models (${routable.length} tried); keeping the catalog for this pass`,
+          `[opencode-agent-router] probe found no usable models (${models.length} tried); keeping the catalog for this pass`,
         );
         return {
-          models: routable,
+          models,
           probed: stats.probed,
-          usable: routable.length,
+          usable: models.length,
         };
       }
 
       log(
         config.log,
-        `probe: ${usable.length}/${routable.length} model(s) usable`,
+        `probe: ${usable.length}/${models.length} model(s) usable`,
       );
       return {
-        models: usable.map((result) => result.model),
+        models: usable,
         probed: stats.probed,
         usable: stats.usable,
       };
@@ -460,16 +466,14 @@ export const OpenCodeAgentRouter = Plugin.define({
       refreshing = true;
 
       try {
-        const discovered = await discover();
-        catalog = discovered;
-        log(config.log, `discovered ${discovered.length} models (${reason})`);
+        catalog = await discover();
+        log(config.log, `discovered ${catalog.length} models (${reason})`);
 
         // Probe before scoring so only working models can be selected.
-        const probed = await probeCandidates(discovered, opts.force === true);
-        const models = probed.models;
-        lastPoolSize = models.length;
+        const probed = await probeCandidates(catalog, opts.force === true);
+        lastPoolSize = probed.models.length;
 
-        const assignments = await computeAssignments(models, discovered);
+        const assignments = await computeAssignments(probed.models, catalog);
         currentAssignments = assignments;
         // The agent files carry the model for the next cold start, so they are
         // rewritten whenever routing moves one.
@@ -692,7 +696,6 @@ ${text}
           // Forced, for the same reason a manual refresh is: the user just asked
           // for a different pick, so a cached answer would hide the change.
           const outcome = await applyRouting("manual", {
-            force: true,
             session: curSession,
           });
           if (outcome.status === "busy") {

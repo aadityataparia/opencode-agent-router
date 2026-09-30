@@ -1,7 +1,7 @@
 export class HealthStore {
     state = new Map();
     key(model) {
-        return `${model.providerID}/${model.id}`;
+        return model.target;
     }
     merge(models) {
         return models.map((model) => {

@@ -100,6 +100,7 @@ export interface DiscoveredModel {
   latencyMs: number;
   failures: number;
   successes: number;
+  probeResult: boolean;
   lastSuccessAt?: number;
   lastFailureAt?: number;
   cooldownUntil?: number;

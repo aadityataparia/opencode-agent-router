@@ -85,6 +85,7 @@ export function classifyModel(model) {
         categories,
         health: 1,
         latencyMs: Infinity,
+        probeResult: true,
         failures: 0,
         successes: 0,
         releasedAt: m.time.released,

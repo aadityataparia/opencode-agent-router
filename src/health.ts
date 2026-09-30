@@ -3,8 +3,8 @@ import type { DiscoveredModel } from "./types.ts";
 export class HealthStore {
   private readonly state = new Map<string, DiscoveredModel>();
 
-  private key(model: Pick<DiscoveredModel, "providerID" | "id">): string {
-    return `${model.providerID}/${model.id}`;
+  private key(model: DiscoveredModel): string {
+    return model.target;
   }
 
   merge(models: DiscoveredModel[]): DiscoveredModel[] {
