@@ -140,6 +140,7 @@ export interface RouterConfig {
   presets: PresetName[];
   /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */
   agents: Record<string, AgentRequirements>;
+  ignoredProviders: string[];
 }
 
 // Add timer to request

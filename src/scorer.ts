@@ -23,13 +23,13 @@ export function satisfies(
 function latencyScore(model: DiscoveredModel): number {
   if (!Number.isFinite(model.latencyMs)) return 0.5;
   return (
-    1 / (1 + model.latencyMs / 5_000) +
-    (model.categories.has("fast") ? 0.25 : 0)
+    1 /
+    (1 + (model.latencyMs - (model.categories.has("fast") ? 500 : 0)) / 5_000)
   );
 }
 
 function costScore(model: DiscoveredModel): number {
-  const input = ((model.cost.input ?? 0) * 2 + (model.cost.output ?? 0)) / 10;
+  const input = ((model.cost.input ?? 0) * 2 + (model.cost.output ?? 0)) / 20;
   return 1 / (1 + Math.max(0, input));
 }
 

@@ -200,10 +200,12 @@ export const OpenCodeAgentRouter = Plugin.define({
     await ctx.agent.reload();
 
     async function discover(): Promise<DiscoveredModel[]> {
-      const catalog = await ctx.model.list();
-      // No self-exclusion is needed here: the router publishes no models of its
-      // own, so there is no alias for routing to land back on.
-      return health.merge(catalog.data.map(classifyModel));
+      const allModels = await ctx.model.list();
+      return health.merge(
+        allModels.data
+          .filter((m) => !config.ignoredProviders.includes(m.providerID))
+          .map(classifyModel),
+      );
     }
 
     /** Sticky across passes: a failed model is in cooldown, so a per-pass rebuild would empty it. */

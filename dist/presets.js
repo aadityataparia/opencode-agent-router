@@ -14,12 +14,6 @@ export const PRESET_NAMES = [
     "oh-my-openagent",
     "oh-my-opencode-slim",
 ];
-/** npm package that provides each preset. */
-const PRESET_PACKAGES = {
-    "oh-my-opencode": "oh-my-opencode",
-    "oh-my-openagent": "oh-my-openagent",
-    "oh-my-opencode-slim": "oh-my-opencode-slim",
-};
 export function isPresetName(value) {
     return PRESET_NAMES.includes(value);
 }
@@ -72,8 +66,7 @@ export function detectPresets() {
     if (declared === undefined)
         return [...PRESET_NAMES];
     const found = PRESET_NAMES.filter((preset) => {
-        const pkg = PRESET_PACKAGES[preset];
-        return declared.some((entry) => entry === pkg || entry.startsWith(`${pkg}@`));
+        return declared.some((entry) => entry === preset || entry.startsWith(`${preset}@`));
     });
     return found;
 }
@@ -118,7 +111,9 @@ function extractPluginEntries(raw) {
         const end = findArrayEnd(raw, start);
         if (end === undefined)
             continue;
-        for (const element of raw.slice(start, end).matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+        for (const element of raw
+            .slice(start, end)
+            .matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
             entries.push(unescapeJson(element[1] ?? ""));
         }
     }

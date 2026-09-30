@@ -1,9 +1,4 @@
-import {
-  detectPresets,
-  isPresetName,
-  PRESET_NAMES,
-  type PresetName,
-} from "./presets";
+import { detectPresets, PRESET_NAMES, type PresetName } from "./presets";
 import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
 
 /**
@@ -146,7 +141,10 @@ class Resolver {
   }
 
   /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
-  presets(key: string): PresetName[] | undefined {
+  array<T extends string>(
+    key: string,
+    filter?: (s: string) => s is T,
+  ): T[] | undefined {
     const { value, source } = this.raw(key);
     if (value === undefined) return undefined;
 
@@ -160,8 +158,8 @@ class Resolver {
 
     if (requested.length === 0) return undefined;
 
-    const known = requested.filter(isPresetName);
-    const unknown = requested.filter((entry) => !isPresetName(entry));
+    const known = filter ? requested.filter<T>(filter) : (requested as T[]);
+    const unknown = filter ? requested.filter((entry) => !filter(entry)) : [];
     if (unknown.length > 0) {
       warn(
         `ignoring unknown preset(s) ${unknown.join(", ")}; valid: ${PRESET_NAMES.join(", ")}`,
@@ -200,7 +198,7 @@ export function loadConfig(options: PluginOptions = {}): RouterConfig {
   // switch the user set.
   const verbose = resolve.boolean("log", false);
 
-  const configured = resolve.presets("presets");
+  const configured = resolve.array<PresetName>("presets");
   const presets = configured ?? detectPresets();
 
   const config: RouterConfig = {
@@ -216,6 +214,7 @@ export function loadConfig(options: PluginOptions = {}): RouterConfig {
     log: verbose,
     presets,
     agents: resolve.agents("agents"),
+    ignoredProviders: resolve.array("ignoredProviders") ?? [],
   };
 
   if (verbose) {

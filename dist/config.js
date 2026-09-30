@@ -1,4 +1,4 @@
-import { detectPresets, isPresetName, PRESET_NAMES, } from "./presets";
+import { detectPresets, PRESET_NAMES } from "./presets";
 const strategies = new Set([
     "round-robin",
     "weighted",
@@ -97,7 +97,7 @@ class Resolver {
         return fallback;
     }
     /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
-    presets(key) {
+    array(key, filter) {
         const { value, source } = this.raw(key);
         if (value === undefined)
             return undefined;
@@ -108,8 +108,8 @@ class Resolver {
             .filter((entry) => entry.length > 0);
         if (requested.length === 0)
             return undefined;
-        const known = requested.filter(isPresetName);
-        const unknown = requested.filter((entry) => !isPresetName(entry));
+        const known = filter ? requested.filter(filter) : requested;
+        const unknown = filter ? requested.filter((entry) => !filter(entry)) : [];
         if (unknown.length > 0) {
             warn(`ignoring unknown preset(s) ${unknown.join(", ")}; valid: ${PRESET_NAMES.join(", ")}`);
         }
@@ -140,7 +140,7 @@ export function loadConfig(options = {}) {
     // Logging is resolved first so everything below can report through the same
     // switch the user set.
     const verbose = resolve.boolean("log", false);
-    const configured = resolve.presets("presets");
+    const configured = resolve.array("presets");
     const presets = configured ?? detectPresets();
     const config = {
         refreshMs: resolve.positiveNumber("refreshMs", 60 * 60_000),
@@ -152,6 +152,7 @@ export function loadConfig(options = {}) {
         log: verbose,
         presets,
         agents: resolve.agents("agents"),
+        ignoredProviders: resolve.array("ignoredProviders") ?? [],
     };
     if (verbose) {
         const origin = configured ? resolve.source("presets") : "detected";
