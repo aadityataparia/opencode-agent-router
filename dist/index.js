@@ -464,9 +464,7 @@ ${text}
                     await say(parsed.message);
                     return;
                 case "refresh": {
-                    // Forced: a user asking to refresh has usually just changed
-                    // something, and a cached or cooling-down answer would hide it.
-                    const outcome = await applyRouting("manual", { force: true });
+                    const outcome = await applyRouting("manual");
                     if (outcome.status === "busy") {
                         await say("A refresh is already running; try again in a moment.");
                         return;
@@ -475,15 +473,11 @@ ${text}
                         await say("Refresh failed. The published aliases were left untouched; see the log for the error.");
                         return;
                     }
-                    // With probing off a refresh is only a re-scan; do not claim a re-probe.
-                    const probeNote = ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.` +
-                        (!config.probe
-                            ? " Probing is off, so this was a one-off catalog re-scan — set `probe: true` to run it periodically."
-                            : "");
+                    const probeNote = ` ${lastRun?.usable ?? 0} model(s) usable.`;
                     await say(renderStatus() +
                         "\n\n" +
                         (outcome.status === "changed"
-                            ? `Re-scanned and re-probed. ${outcome.assignments} agent(s) routed.${probeNote}`
+                            ? `Re-scanned. ${outcome.assignments} agent(s) routed.${probeNote}`
                             : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`));
                     return;
                 }
@@ -579,9 +573,26 @@ ${text}
                     return;
                 }
                 case "probe": {
+                    if (parsed.modelRef === "all") {
+                        const outcome = await applyRouting("manual", { force: true });
+                        const probeNote = ` ${lastRun?.usable ?? 0}/${lastRun?.probed ?? 0} probed model(s) usable.` +
+                            (!config.probe
+                                ? " Probing is off, so this was a one-off catalog re-scan — set `probe: true` to run it periodically (costs tokens)."
+                                : "");
+                        await say(renderStatus() +
+                            "\n\n" +
+                            (outcome.status === "changed"
+                                ? `Re-scanned and re-probed. ${outcome.assignments} agent(s) routed.${probeNote}`
+                                : `Re-scanned ${catalog.length} model(s); routing is unchanged.${probeNote}`));
+                    }
                     const target = findModel(catalog, parsed.modelRef);
                     if (!target) {
-                        await explainMissingModel(parsed.modelRef);
+                        const matches = countMatches(catalog, parsed.modelRef);
+                        const result = await probeCandidates(matches, true);
+                        await say([
+                            `Probed ${result.probed}, found ${result.usable} usable models.`,
+                            `Use \`/router refresh\` to record probes into routing. Or they will be updated in next refresh.`,
+                        ].join("\n"));
                         return;
                     }
                     // Forced and unconditional: a user asking now is asking past the probe
