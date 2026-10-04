@@ -1,3 +1,3 @@
 import { Plugin } from "@opencode/plugin";
-export declare const OpenCodeAgentRouter: Plugin.Plugin;
-export default OpenCodeAgentRouter;
+declare const _default: Plugin.Plugin;
+export default _default;

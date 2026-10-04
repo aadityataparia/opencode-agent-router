@@ -1,4 +1,4 @@
-import type { DiscoveredModel } from "./types";
+import type { DiscoveredModel, ProbeResult, ProbeVerdict } from "./types";
 import { Context } from "@opencode/plugin/promise/plugin";
 
 /**
@@ -14,16 +14,6 @@ import { Context } from "@opencode/plugin/promise/plugin";
  * traffic) · `inconclusive` a transient throttle, which must never shrink the
  * pool on its own.
  */
-export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
-
-export interface ProbeResult {
-  readonly verdict: ProbeVerdict;
-  readonly latencyMs: number;
-  readonly reply?: string;
-  readonly status?: number;
-  readonly error?: string;
-}
-
 export interface ProbeOptions {
   /** OpenCode's generate call, which resolves the endpoint and credentials. */
   readonly generate: Context["generate"]["text"];
@@ -96,7 +86,7 @@ const hasError = (reply: string) => {
 };
 
 export async function probeModel(
-  model: Pick<DiscoveredModel, "id" | "modelID" | "providerID">,
+  model: Pick<DiscoveredModel, "id" | "providerID">,
   options: ProbeOptions,
 ): Promise<ProbeResult> {
   const started = Date.now();
@@ -107,7 +97,7 @@ export async function probeModel(
     // here and the loser's result is dropped.
     const call = options.generate({
       prompt: PROMPT,
-      model: { providerID: model.providerID, id: model.modelID ?? model.id },
+      model: { providerID: model.providerID, id: model.id },
     });
 
     const timeout = new Promise<never>((_resolve, reject) => {

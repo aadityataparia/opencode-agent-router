@@ -1,171 +1,107 @@
-import { detectPresets, PRESET_NAMES } from "./presets";
-/** Every strategy the router can be asked for, in the order they are offered. */
-export const STRATEGY_NAMES = [
-    "adaptive",
-    "latency",
-    "cost",
-    "weighted",
-    "round-robin",
-];
-export function isRoutingStrategy(value) {
-    return STRATEGY_NAMES.includes(value);
-}
-const ENV_PREFIX = "OCO_ROUTER_";
-function warn(message) {
-    // console.error so diagnostics surface in `--print-logs` output.
-    console.error(`[opencode-agent-router] ${message}`);
-}
-class Resolver {
-    options;
-    origins = new Map();
-    constructor(options) {
-        this.options = options;
+import { AGENT_REQUIREMENTS } from "./agents";
+import { logger } from "./logger";
+import { presetAgentNames } from "./presets";
+import { STRATEGY_NAMES, } from "./types";
+const DEFAULTS = {
+    refreshMs: 60 * 60_000,
+    maxFallbacks: 5,
+    probe: false,
+    probeTimeoutMs: 8_000,
+    strategy: "adaptive",
+    minHealth: 0.5,
+    agents: {},
+    ignoredProviders: [],
+};
+export class Config {
+    raw;
+    detectedPresets;
+    constructor(raw, detectedPresets = []) {
+        this.raw = raw;
+        this.detectedPresets = detectedPresets;
     }
-    /**
-     * An empty env var is unset: `OCO_ROUTER_PROBE=` means "no preference", and
-     * letting it win would silently mean `false`.
-     */
-    raw(key) {
-        const env = process.env[ENV_PREFIX + envSuffix(key)];
-        if (env !== undefined && env.trim() !== "") {
-            return { value: env, source: "env" };
-        }
-        const fromOptions = this.options[key];
-        if (fromOptions !== undefined && fromOptions !== null) {
-            return { value: fromOptions, source: "config" };
-        }
-        return { value: undefined, source: "default" };
+    get current() {
+        const config = {
+            refreshMs: this.positiveNumber("refreshMs"),
+            maxFallbacks: Math.max(1, Math.floor(this.positiveNumber("maxFallbacks"))),
+            probe: this.boolean("probe", false),
+            probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
+            strategy: this.strategy(),
+            minHealth: this.clampedNumber("minHealth", 0, 1),
+            presets: this.array("presets") ?? this.detectedPresets,
+            agents: this.agents(),
+            ignoredProviders: this.array("ignoredProviders") ?? [],
+        };
+        return config;
     }
-    source(key) {
-        return this.origins.get(key) ?? "default";
-    }
-    note(key, source) {
-        this.origins.set(key, source);
-    }
-    /** A positive number. Zero and negatives are rejected as likely mistakes. */
-    positiveNumber(key, fallback) {
-        const { value, source } = this.raw(key);
-        if (value === undefined)
-            return fallback;
-        const parsed = typeof value === "number" ? value : Number(String(value).trim());
-        if (!Number.isFinite(parsed) || parsed <= 0) {
-            warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
-            return fallback;
-        }
-        this.note(key, source);
-        return parsed;
-    }
-    /** A number clamped into range, for values where 0 is legitimate. */
-    clampedNumber(key, fallback, min, max) {
-        const { value, source } = this.raw(key);
-        if (value === undefined)
-            return fallback;
-        const parsed = typeof value === "number" ? value : Number(String(value).trim());
-        if (!Number.isFinite(parsed)) {
-            warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
-            return fallback;
-        }
-        this.note(key, source);
-        return Math.min(max, Math.max(min, parsed));
-    }
-    boolean(key, fallback) {
-        const { value, source } = this.raw(key);
-        if (value === undefined)
-            return fallback;
-        if (typeof value === "boolean") {
-            this.note(key, source);
-            return value;
-        }
-        const text = String(value).trim().toLowerCase();
-        if (["1", "true", "yes", "on"].includes(text)) {
-            this.note(key, source);
-            return true;
-        }
-        if (["0", "false", "no", "off"].includes(text)) {
-            this.note(key, source);
-            return false;
-        }
-        warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
-        return fallback;
-    }
-    strategy(key, fallback) {
-        const { value, source } = this.raw(key);
-        if (value === undefined)
-            return fallback;
-        const text = String(value).trim().toLowerCase();
-        if (isRoutingStrategy(text)) {
-            this.note(key, source);
-            return text;
-        }
-        warn(`ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${STRATEGY_NAMES.join(", ")}`);
-        return fallback;
-    }
-    /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
-    array(key, filter) {
-        const { value, source } = this.raw(key);
+    array(key) {
+        const value = this.raw[key];
         if (value === undefined)
             return undefined;
-        const requested = (Array.isArray(value)
-            ? value.map((entry) => String(entry))
-            : String(value).split(","))
-            .map((entry) => entry.trim().toLowerCase())
-            .filter((entry) => entry.length > 0);
-        if (requested.length === 0)
+        if (!Array.isArray(value)) {
+            logger.trace(`ignoring ${key}: expected an array`);
             return undefined;
-        const known = filter ? requested.filter(filter) : requested;
-        const unknown = filter ? requested.filter((entry) => !filter(entry)) : [];
-        if (unknown.length > 0) {
-            warn(`ignoring unknown preset(s) ${unknown.join(", ")}; valid: ${PRESET_NAMES.join(", ")}`);
         }
-        if (known.length === 0)
-            return undefined;
-        this.note(key, source);
-        return known;
-    }
-    /** A plain object of agent requirement overrides. */
-    agents(key) {
-        const { value, source } = this.raw(key);
-        if (value === undefined)
-            return {};
-        if (typeof value !== "object" || Array.isArray(value)) {
-            warn(`ignoring ${key}: expected an object of agent names`);
-            return {};
-        }
-        this.note(key, source);
         return value;
     }
-}
-/** Config key -> environment variable suffix. */
-function envSuffix(key) {
-    return key.replace(/[A-Z]/g, (char) => `_${char}`).toUpperCase();
-}
-export function loadConfig(options = {}) {
-    const resolve = new Resolver(options);
-    // Logging is resolved first so everything below can report through the same
-    // switch the user set.
-    const verbose = resolve.boolean("log", false);
-    const configured = resolve.array("presets");
-    const presets = configured ?? detectPresets();
-    const config = {
-        refreshMs: resolve.positiveNumber("refreshMs", 60 * 60_000),
-        maxFallbacks: Math.max(1, Math.floor(resolve.positiveNumber("maxFallbacks", 5))),
-        probe: resolve.boolean("probe", false),
-        probeTimeoutMs: resolve.positiveNumber("probeTimeoutMs", 8_000),
-        strategy: resolve.strategy("strategy", "adaptive"),
-        minHealth: resolve.clampedNumber("minHealth", 0.5, 0, 1),
-        log: verbose,
-        presets,
-        agents: resolve.agents("agents"),
-        ignoredProviders: resolve.array("ignoredProviders") ?? [],
-    };
-    if (verbose) {
-        const origin = configured ? resolve.source("presets") : "detected";
-        const overridden = Object.entries(config)
-            .filter(([key]) => resolve.source(key) !== "default")
-            .map(([key]) => `${key}(${resolve.source(key)})`)
-            .join(" ");
-        warn(`routing for preset(s): ${presets.join(", ") || "(none)"} (${origin})` +
-            (overridden ? ` | set: ${overridden}` : " | all defaults"));
+    boolean(key, defaultValue) {
+        const value = this.raw[key];
+        if (value === undefined)
+            return defaultValue;
+        if (typeof value !== "boolean") {
+            logger.trace(`ignoring ${key}: expected a boolean`);
+            return defaultValue;
+        }
+        return value;
     }
-    return config;
+    positiveNumber(key) {
+        const value = this.raw[key];
+        if (value === undefined)
+            return DEFAULTS[key];
+        if (typeof value !== "number" || value <= 0) {
+            logger.trace(`ignoring ${key}: expected a positive number`);
+            return DEFAULTS[key];
+        }
+        return value;
+    }
+    clampedNumber(key, min, max) {
+        const value = this.raw[key];
+        if (value === undefined)
+            return DEFAULTS[key];
+        if (typeof value !== "number" || value < min || value > max) {
+            logger.trace(`ignoring ${key}: expected a number between ${min} and ${max}`);
+            return DEFAULTS[key];
+        }
+        return value;
+    }
+    strategy() {
+        const value = this.raw.strategy;
+        if (value === undefined)
+            return DEFAULTS.strategy;
+        if (typeof value !== "string" || !STRATEGY_NAMES.includes(value)) {
+            logger.trace(`ignoring options.strategy: expected a routing strategy (${DEFAULTS.strategy} fallback)`);
+            return DEFAULTS.strategy;
+        }
+        return value;
+    }
+    agents() {
+        let value = this.raw.agents;
+        if (typeof value !== "object" || Array.isArray(value)) {
+            logger.trace(`ignoring options.agents: expected an object of agent names`);
+            value = {};
+        }
+        const presets = presetAgentNames(this.raw.presets ?? this.detectedPresets);
+        const origin = this.raw.presets ? "options" : "detected";
+        const overridden = this.raw.agents
+            ? Object.keys(this.raw.agents)
+            : undefined;
+        logger.trace(`routing for agents(s): ${presets?.join(", ") || "(none)"} (${origin} presets)` +
+            (overridden ? ` and options.agents: ${overridden}` : ""));
+        return {
+            ...presets.reduce((acc, agent) => {
+                acc[agent] = AGENT_REQUIREMENTS[agent];
+                return acc;
+            }, {}),
+            ...value,
+        };
+    }
 }

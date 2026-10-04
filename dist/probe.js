@@ -63,7 +63,7 @@ export async function probeModel(model, options) {
         // here and the loser's result is dropped.
         const call = options.generate({
             prompt: PROMPT,
-            model: { providerID: model.providerID, id: model.modelID ?? model.id },
+            model: { providerID: model.providerID, id: model.id },
         });
         const timeout = new Promise((_resolve, reject) => {
             timer = setTimeout(() => reject(new Error(`probe timed out after ${options.timeoutMs}ms`)), options.timeoutMs);

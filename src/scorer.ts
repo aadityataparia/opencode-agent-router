@@ -1,6 +1,4 @@
-import { AGENT_REQUIREMENTS } from "./agents";
 import {
-  type AgentName,
   type Candidate,
   type DiscoveredModel,
   type AgentRequirements,
@@ -21,11 +19,9 @@ export function satisfies(
 }
 
 function latencyScore(model: DiscoveredModel): number {
-  if (!Number.isFinite(model.latencyMs)) return 0.5;
-  return (
-    1 /
-    (1 + (model.latencyMs - (model.categories.has("fast") ? 500 : 0)) / 5_000)
-  );
+  let latency = model.latencyMs;
+  if (!Number.isFinite(model.latencyMs)) latency = 5000;
+  return 1 / (1 + (latency - (model.categories.has("fast") ? 500 : 0)) / 5_000);
 }
 
 function costScore(model: DiscoveredModel): number {
@@ -35,23 +31,14 @@ function costScore(model: DiscoveredModel): number {
 
 function contextScore(model: DiscoveredModel, req: AgentRequirements): number {
   if (!req.minContext) {
-    // No bar to measure against, so fall back to the tag rather than grading
-    // every model identically.
     return model.categories.has("long-context") ? 1 : 0.5;
   }
   return Math.min(model.context / req.minContext, 2) / 2;
 }
 
-/**
- * Three categories are measured signals rather than model tags: they score the
- * model continuously instead of asking whether it carries the tag. A model
- * labelled `fast` is not necessarily fast, so the tag is the weaker signal and
- * the measurement wins.
- */
 function categoryScore(model: DiscoveredModel, req: AgentRequirements): number {
   let score = 0;
   let maxWeight = 0;
-  // general fallback
   req.weights.general = req.weights.general ?? 0.1;
 
   for (const [category, weight] of Object.entries(req.weights)) {
@@ -105,20 +92,12 @@ const scoreRecency = (model: DiscoveredModel): number => {
   return 1 - years / 10;
 };
 
-export const getAgentRequirements = (
-  agent: AgentName,
-  additionals: Record<string, AgentRequirements> = {},
-): AgentRequirements => {
-  return {
-    ...DEFAULT_AGENT_REQ,
-    ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
-  };
-};
-
 export const scoreModel = (
   model: DiscoveredModel,
-  req: AgentRequirements = DEFAULT_AGENT_REQ,
+  passed: AgentRequirements = DEFAULT_AGENT_REQ,
 ): { score: number; breakdown: Candidate["breakdown"] } => {
+  const req = { ...DEFAULT_AGENT_REQ, ...passed };
+
   const breakdown = {
     category: categoryScore(model, req),
     health: model.health,
@@ -138,17 +117,18 @@ export const scoreModel = (
 };
 
 export function findCandidates(
-  agent: AgentName,
+  req: AgentRequirements,
   models: DiscoveredModel[],
-  additionals: Record<string, AgentRequirements>,
-  minHeadlth: number = 0,
 ): Candidate[] {
-  const req = getAgentRequirements(agent, additionals);
-
   return models
-    .filter((model) => model.health > minHeadlth && satisfies(model, req))
+    .filter((model) => satisfies(model, req))
     .map((model) => {
-      return { model, ...scoreModel(model, req) };
+      return {
+        id: model.id,
+        providerID: model.providerID,
+        target: model.target,
+        ...scoreModel(model, req),
+      };
     })
     .sort((a, b) => b.score - a.score);
 }

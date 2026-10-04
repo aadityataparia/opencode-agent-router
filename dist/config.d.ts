@@ -1,13 +1,13 @@
-import type { RouterConfig, RoutingStrategy } from "./types";
-/**
- * Every setting resolves in the same order: environment variable
- * (`OCO_ROUTER_*`), then plugin options, then the built-in default. Env wins
- * because it is the more ad-hoc layer — it is what a one-off
- * `OCO_ROUTER_LOG=true opencode` sets.
- */
-/** The `ctx.options` object the host passes to `setup`. */
-export type PluginOptions = Readonly<Record<string, unknown>>;
-/** Every strategy the router can be asked for, in the order they are offered. */
-export declare const STRATEGY_NAMES: readonly ["adaptive", "latency", "cost", "weighted", "round-robin"];
-export declare function isRoutingStrategy(value: string): value is RoutingStrategy;
-export declare function loadConfig(options?: PluginOptions): RouterConfig;
+import { AgentRequirements, PresetName, RouterConfig, RoutingStrategy } from "./types";
+export declare class Config {
+    private readonly raw;
+    private readonly detectedPresets;
+    constructor(raw: Partial<RouterConfig>, detectedPresets?: PresetName[]);
+    get current(): RouterConfig;
+    array<T>(key: keyof RouterConfig): T[] | undefined;
+    boolean(key: keyof RouterConfig, defaultValue: boolean): boolean;
+    positiveNumber(key: keyof RouterConfig): number;
+    clampedNumber(key: keyof RouterConfig, min: number, max: number): number;
+    strategy(): RoutingStrategy;
+    agents(): Record<string, AgentRequirements>;
+}

@@ -1,4 +1,10 @@
-import type { PresetName } from "./presets";
+export const PRESET_NAMES = [
+  "oh-my-opencode",
+  "oh-my-openagent",
+  "oh-my-opencode-slim",
+] as const;
+
+export type PresetName = (typeof PRESET_NAMES)[number];
 
 /**
  * Agent id prefix the router owns; each role's `model` is kept pointed at
@@ -65,12 +71,14 @@ export const MODEL_CATEGORIES = [
 
 export type ModelCategory = (typeof MODEL_CATEGORIES)[number];
 
-export type RoutingStrategy =
-  | "round-robin"
-  | "weighted"
-  | "latency"
-  | "cost"
-  | "adaptive";
+export const STRATEGY_NAMES = [
+  "adaptive",
+  "latency",
+  "cost",
+  "round-robin",
+] as const;
+
+export type RoutingStrategy = (typeof STRATEGY_NAMES)[number];
 
 export interface ModelCapabilities {
   reasoning: boolean;
@@ -100,7 +108,7 @@ export interface DiscoveredModel {
   latencyMs: number;
   failures: number;
   successes: number;
-  probeResult: boolean;
+  lastProbeResult: boolean;
   lastSuccessAt?: number;
   lastFailureAt?: number;
   cooldownUntil?: number;
@@ -116,7 +124,9 @@ export interface AgentRequirements {
 }
 
 export interface Candidate {
-  model: DiscoveredModel;
+  id: string;
+  providerID: string;
+  target: string;
   score: number;
   breakdown: {
     category: number;
@@ -136,7 +146,6 @@ export interface RouterConfig {
   probeTimeoutMs: number;
   strategy: RoutingStrategy;
   minHealth: number;
-  log: boolean;
   /** Agent presets to route for; empty means auto-detect at startup. */
   presets: PresetName[];
   /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */
@@ -149,4 +158,14 @@ declare global {
   interface Request {
     startTime?: number;
   }
+}
+
+export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
+
+export interface ProbeResult {
+  readonly verdict: ProbeVerdict;
+  readonly latencyMs: number;
+  readonly reply?: string;
+  readonly status?: number;
+  readonly error?: string;
 }

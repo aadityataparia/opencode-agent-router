@@ -1,3 +1,8 @@
+export const PRESET_NAMES = [
+    "oh-my-opencode",
+    "oh-my-openagent",
+    "oh-my-opencode-slim",
+];
 /**
  * Agent id prefix the router owns; each role's `model` is kept pointed at
  * whichever real model wins routing.
@@ -45,4 +50,10 @@ export const MODEL_CATEGORIES = [
     "long-context",
     "cheap",
     "general",
+];
+export const STRATEGY_NAMES = [
+    "adaptive",
+    "latency",
+    "cost",
+    "round-robin",
 ];

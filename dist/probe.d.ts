@@ -1,4 +1,4 @@
-import type { DiscoveredModel } from "./types";
+import type { DiscoveredModel, ProbeResult } from "./types";
 import { Context } from "@opencode/plugin/promise/plugin";
 /**
  * Probes go through OpenCode's own generate API, so they use the real endpoint,
@@ -12,19 +12,11 @@ import { Context } from "@opencode/plugin/promise/plugin";
  * traffic) · `inconclusive` a transient throttle, which must never shrink the
  * pool on its own.
  */
-export type ProbeVerdict = "ok" | "unusable" | "unauthorized" | "inconclusive";
-export interface ProbeResult {
-    readonly verdict: ProbeVerdict;
-    readonly latencyMs: number;
-    readonly reply?: string;
-    readonly status?: number;
-    readonly error?: string;
-}
 export interface ProbeOptions {
     /** OpenCode's generate call, which resolves the endpoint and credentials. */
     readonly generate: Context["generate"]["text"];
     readonly timeoutMs: number;
 }
-export declare function probeModel(model: Pick<DiscoveredModel, "id" | "modelID" | "providerID">, options: ProbeOptions): Promise<ProbeResult>;
+export declare function probeModel(model: Pick<DiscoveredModel, "id" | "providerID">, options: ProbeOptions): Promise<ProbeResult>;
 /** Runs `worker` over `items`, at most `limit` at a time, preserving order. */
 export declare function mapWithConcurrency<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]>;

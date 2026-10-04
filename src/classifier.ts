@@ -94,7 +94,7 @@ export function classifyModel(model: any): DiscoveredModel {
     categories,
     health: 1,
     latencyMs: Infinity,
-    probeResult: true,
+    lastProbeResult: true,
     failures: 0,
     successes: 0,
     releasedAt: m.time.released,

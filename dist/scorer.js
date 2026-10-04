@@ -1,4 +1,3 @@
-import { AGENT_REQUIREMENTS } from "./agents";
 import { MODEL_CATEGORIES, } from "./types";
 export function satisfies(model, req) {
     if (req.minContext && model.context < req.minContext)
@@ -12,10 +11,10 @@ export function satisfies(model, req) {
     return true;
 }
 function latencyScore(model) {
+    let latency = model.latencyMs;
     if (!Number.isFinite(model.latencyMs))
-        return 0.5;
-    return (1 /
-        (1 + (model.latencyMs - (model.categories.has("fast") ? 500 : 0)) / 5_000));
+        latency = 5000;
+    return 1 / (1 + (latency - (model.categories.has("fast") ? 500 : 0)) / 5_000);
 }
 function costScore(model) {
     const input = ((model.cost.input ?? 0) * 2 + (model.cost.output ?? 0)) / 20;
@@ -23,22 +22,13 @@ function costScore(model) {
 }
 function contextScore(model, req) {
     if (!req.minContext) {
-        // No bar to measure against, so fall back to the tag rather than grading
-        // every model identically.
         return model.categories.has("long-context") ? 1 : 0.5;
     }
     return Math.min(model.context / req.minContext, 2) / 2;
 }
-/**
- * Three categories are measured signals rather than model tags: they score the
- * model continuously instead of asking whether it carries the tag. A model
- * labelled `fast` is not necessarily fast, so the tag is the weaker signal and
- * the measurement wins.
- */
 function categoryScore(model, req) {
     let score = 0;
     let maxWeight = 0;
-    // general fallback
     req.weights.general = req.weights.general ?? 0.1;
     for (const [category, weight] of Object.entries(req.weights)) {
         if (!MODEL_CATEGORIES.includes(category))
@@ -86,13 +76,8 @@ const scoreRecency = (model) => {
         : 0;
     return 1 - years / 10;
 };
-export const getAgentRequirements = (agent, additionals = {}) => {
-    return {
-        ...DEFAULT_AGENT_REQ,
-        ...(AGENT_REQUIREMENTS[agent] ?? additionals[agent]),
-    };
-};
-export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
+export const scoreModel = (model, passed = DEFAULT_AGENT_REQ) => {
+    const req = { ...DEFAULT_AGENT_REQ, ...passed };
     const breakdown = {
         category: categoryScore(model, req),
         health: model.health,
@@ -108,12 +93,16 @@ export const scoreModel = (model, req = DEFAULT_AGENT_REQ) => {
     const score = breakdown.category + breakdown.recency * 0.1 + breakdown.capabilities * 0.1;
     return { score, breakdown };
 };
-export function findCandidates(agent, models, additionals, minHeadlth = 0) {
-    const req = getAgentRequirements(agent, additionals);
+export function findCandidates(req, models) {
     return models
-        .filter((model) => model.health > minHeadlth && satisfies(model, req))
+        .filter((model) => satisfies(model, req))
         .map((model) => {
-        return { model, ...scoreModel(model, req) };
+        return {
+            id: model.id,
+            providerID: model.providerID,
+            target: model.target,
+            ...scoreModel(model, req),
+        };
     })
         .sort((a, b) => b.score - a.score);
 }

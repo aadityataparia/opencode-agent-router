@@ -1,241 +1,145 @@
-import { detectPresets, PRESET_NAMES, type PresetName } from "./presets";
-import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
+import { AGENT_REQUIREMENTS } from "./agents";
+import { logger } from "./logger";
+import { presetAgentNames } from "./presets";
+import {
+  AgentRequirements,
+  PresetName,
+  RouterConfig,
+  RoutingStrategy,
+  STRATEGY_NAMES,
+} from "./types";
 
-/**
- * Every setting resolves in the same order: environment variable
- * (`OCO_ROUTER_*`), then plugin options, then the built-in default. Env wins
- * because it is the more ad-hoc layer — it is what a one-off
- * `OCO_ROUTER_LOG=true opencode` sets.
- */
+const DEFAULTS: Partial<RouterConfig> = {
+  refreshMs: 60 * 60_000,
+  maxFallbacks: 5,
+  probe: false,
+  probeTimeoutMs: 8_000,
+  strategy: "adaptive",
+  minHealth: 0.5,
+  agents: {},
+  ignoredProviders: [],
+};
 
-/** The `ctx.options` object the host passes to `setup`. */
-export type PluginOptions = Readonly<Record<string, unknown>>;
+export class Config {
+  constructor(
+    private readonly raw: Partial<RouterConfig>,
+    private readonly detectedPresets: PresetName[] = [],
+  ) {}
 
-/** Every strategy the router can be asked for, in the order they are offered. */
-export const STRATEGY_NAMES = [
-  "adaptive",
-  "latency",
-  "cost",
-  "weighted",
-  "round-robin",
-] as const satisfies readonly RoutingStrategy[];
+  get current(): RouterConfig {
+    const config: RouterConfig = {
+      refreshMs: this.positiveNumber("refreshMs"),
+      maxFallbacks: Math.max(
+        1,
+        Math.floor(this.positiveNumber("maxFallbacks")),
+      ),
+      probe: this.boolean("probe", false),
+      probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
+      strategy: this.strategy(),
+      minHealth: this.clampedNumber("minHealth", 0, 1),
+      presets: this.array("presets") ?? this.detectedPresets,
+      agents: this.agents(),
+      ignoredProviders: this.array("ignoredProviders") ?? [],
+    };
 
-export function isRoutingStrategy(
-  value: string,
-): value is RoutingStrategy {
-  return (STRATEGY_NAMES as readonly string[]).includes(value);
-}
-
-/** Where a resolved value came from, for the startup summary. */
-type Source = "env" | "config" | "default";
-
-const ENV_PREFIX = "OCO_ROUTER_";
-
-function warn(message: string): void {
-  // console.error so diagnostics surface in `--print-logs` output.
-  console.error(`[opencode-agent-router] ${message}`);
-}
-
-class Resolver {
-  private readonly origins = new Map<string, Source>();
-
-  constructor(private readonly options: PluginOptions) {}
-
-  /**
-   * An empty env var is unset: `OCO_ROUTER_PROBE=` means "no preference", and
-   * letting it win would silently mean `false`.
-   */
-  private raw(key: string): { value: unknown; source: Source } {
-    const env = process.env[ENV_PREFIX + envSuffix(key)];
-    if (env !== undefined && env.trim() !== "") {
-      return { value: env, source: "env" };
-    }
-
-    const fromOptions = this.options[key];
-    if (fromOptions !== undefined && fromOptions !== null) {
-      return { value: fromOptions, source: "config" };
-    }
-
-    return { value: undefined, source: "default" };
+    return config;
   }
 
-  source(key: string): Source {
-    return this.origins.get(key) ?? "default";
-  }
-
-  private note(key: string, source: Source): void {
-    this.origins.set(key, source);
-  }
-
-  /** A positive number. Zero and negatives are rejected as likely mistakes. */
-  positiveNumber(key: string, fallback: number): number {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    const parsed =
-      typeof value === "number" ? value : Number(String(value).trim());
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      warn(
-        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
-      );
-      return fallback;
-    }
-
-    this.note(key, source);
-    return parsed;
-  }
-
-  /** A number clamped into range, for values where 0 is legitimate. */
-  clampedNumber(
-    key: string,
-    fallback: number,
-    min: number,
-    max: number,
-  ): number {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    const parsed =
-      typeof value === "number" ? value : Number(String(value).trim());
-    if (!Number.isFinite(parsed)) {
-      warn(
-        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
-      );
-      return fallback;
-    }
-
-    this.note(key, source);
-    return Math.min(max, Math.max(min, parsed));
-  }
-
-  boolean(key: string, fallback: boolean): boolean {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    if (typeof value === "boolean") {
-      this.note(key, source);
-      return value;
-    }
-
-    const text = String(value).trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(text)) {
-      this.note(key, source);
-      return true;
-    }
-    if (["0", "false", "no", "off"].includes(text)) {
-      this.note(key, source);
-      return false;
-    }
-
-    warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
-    return fallback;
-  }
-
-  strategy(key: string, fallback: RoutingStrategy): RoutingStrategy {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    const text = String(value).trim().toLowerCase();
-    if (isRoutingStrategy(text)) {
-      this.note(key, source);
-      return text;
-    }
-
-    warn(
-      `ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${STRATEGY_NAMES.join(", ")}`,
-    );
-    return fallback;
-  }
-
-  /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
-  array<T extends string>(
-    key: string,
-    filter?: (s: string) => s is T,
-  ): T[] | undefined {
-    const { value, source } = this.raw(key);
+  array<T>(key: keyof RouterConfig): T[] | undefined {
+    const value = this.raw[key];
     if (value === undefined) return undefined;
 
-    const requested = (
-      Array.isArray(value)
-        ? value.map((entry) => String(entry))
-        : String(value).split(",")
-    )
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0);
-
-    if (requested.length === 0) return undefined;
-
-    const known = filter ? requested.filter<T>(filter) : (requested as T[]);
-    const unknown = filter ? requested.filter((entry) => !filter(entry)) : [];
-    if (unknown.length > 0) {
-      warn(
-        `ignoring unknown preset(s) ${unknown.join(", ")}; valid: ${PRESET_NAMES.join(", ")}`,
-      );
+    if (!Array.isArray(value)) {
+      logger.trace(`ignoring ${key}: expected an array`);
+      return undefined;
     }
-    if (known.length === 0) return undefined;
 
-    this.note(key, source);
-    return known;
+    return value as T[];
   }
 
-  /** A plain object of agent requirement overrides. */
-  agents(key: string): Record<string, AgentRequirements> {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return {};
+  boolean(key: keyof RouterConfig, defaultValue: boolean): boolean {
+    const value = this.raw[key];
+    if (value === undefined) return defaultValue;
+
+    if (typeof value !== "boolean") {
+      logger.trace(`ignoring ${key}: expected a boolean`);
+      return defaultValue;
+    }
+
+    return value;
+  }
+
+  positiveNumber(key: keyof RouterConfig): number {
+    const value = this.raw[key];
+    if (value === undefined) return DEFAULTS[key] as number;
+
+    if (typeof value !== "number" || value <= 0) {
+      logger.trace(`ignoring ${key}: expected a positive number`);
+      return DEFAULTS[key] as number;
+    }
+
+    return value;
+  }
+
+  clampedNumber(key: keyof RouterConfig, min: number, max: number): number {
+    const value = this.raw[key];
+    if (value === undefined) return DEFAULTS[key] as number;
+
+    if (typeof value !== "number" || value < min || value > max) {
+      logger.trace(
+        `ignoring ${key}: expected a number between ${min} and ${max}`,
+      );
+      return DEFAULTS[key] as number;
+    }
+
+    return value;
+  }
+
+  strategy(): RoutingStrategy {
+    const value = this.raw.strategy;
+    if (value === undefined) return DEFAULTS.strategy as RoutingStrategy;
+
+    if (typeof value !== "string" || !STRATEGY_NAMES.includes(value)) {
+      logger.trace(
+        `ignoring options.strategy: expected a routing strategy (${DEFAULTS.strategy} fallback)`,
+      );
+      return DEFAULTS.strategy as RoutingStrategy;
+    }
+
+    return value;
+  }
+
+  agents(): Record<string, AgentRequirements> {
+    let value = this.raw.agents;
 
     if (typeof value !== "object" || Array.isArray(value)) {
-      warn(`ignoring ${key}: expected an object of agent names`);
-      return {};
+      logger.trace(
+        `ignoring options.agents: expected an object of agent names`,
+      );
+      value = {};
     }
 
-    this.note(key, source);
-    return value as Record<string, AgentRequirements>;
-  }
-}
+    const presets = presetAgentNames(this.raw.presets ?? this.detectedPresets);
 
-/** Config key -> environment variable suffix. */
-function envSuffix(key: string): string {
-  return key.replace(/[A-Z]/g, (char) => `_${char}`).toUpperCase();
-}
+    const origin = this.raw.presets ? "options" : "detected";
+    const overridden = this.raw.agents
+      ? Object.keys(this.raw.agents)
+      : undefined;
 
-export function loadConfig(options: PluginOptions = {}): RouterConfig {
-  const resolve = new Resolver(options);
-
-  // Logging is resolved first so everything below can report through the same
-  // switch the user set.
-  const verbose = resolve.boolean("log", false);
-
-  const configured = resolve.array<PresetName>("presets");
-  const presets = configured ?? detectPresets();
-
-  const config: RouterConfig = {
-    refreshMs: resolve.positiveNumber("refreshMs", 60 * 60_000),
-    maxFallbacks: Math.max(
-      1,
-      Math.floor(resolve.positiveNumber("maxFallbacks", 5)),
-    ),
-    probe: resolve.boolean("probe", false),
-    probeTimeoutMs: resolve.positiveNumber("probeTimeoutMs", 8_000),
-    strategy: resolve.strategy("strategy", "adaptive"),
-    minHealth: resolve.clampedNumber("minHealth", 0.5, 0, 1),
-    log: verbose,
-    presets,
-    agents: resolve.agents("agents"),
-    ignoredProviders: resolve.array("ignoredProviders") ?? [],
-  };
-
-  if (verbose) {
-    const origin = configured ? resolve.source("presets") : "detected";
-    const overridden = Object.entries(config)
-      .filter(([key]) => resolve.source(key) !== "default")
-      .map(([key]) => `${key}(${resolve.source(key)})`)
-      .join(" ");
-
-    warn(
-      `routing for preset(s): ${presets.join(", ") || "(none)"} (${origin})` +
-        (overridden ? ` | set: ${overridden}` : " | all defaults"),
+    logger.trace(
+      `routing for agents(s): ${presets?.join(", ") || "(none)"} (${origin} presets)` +
+        (overridden ? ` and options.agents: ${overridden}` : ""),
     );
-  }
 
-  return config;
+    return {
+      ...presets.reduce(
+        (acc, agent) => {
+          acc[agent] = AGENT_REQUIREMENTS[agent];
+          return acc;
+        },
+        {} as Record<string, AgentRequirements>,
+      ),
+      ...value,
+    } as Record<string, AgentRequirements>;
+  }
 }
