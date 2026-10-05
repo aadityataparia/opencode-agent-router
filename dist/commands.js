@@ -126,9 +126,10 @@ function formatDuration(ms) {
 }
 function healthCell(model, now) {
     if (model.cooldownUntil && model.cooldownUntil > now) {
-        return `${model.health.toFixed(2)} (cooling)`;
+        return `${model.health.toFixed(2)} (cooling) (${model.successes} ok / ${model.failures} failed)`;
     }
-    return model.health.toFixed(2);
+    return (model.health.toFixed(2) +
+        ` (${model.successes} ok / ${model.failures} failed)`);
 }
 export function tableRow(...cells) {
     return `| ${cells.join(" | ")} |`;

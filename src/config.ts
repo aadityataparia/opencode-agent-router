@@ -15,7 +15,7 @@ const DEFAULTS: Partial<RouterConfig> = {
   probe: false,
   probeTimeoutMs: 8_000,
   strategy: "adaptive",
-  minHealth: 0.5,
+  minHealth: 0.7,
   agents: {},
   ignoredProviders: [],
 };
