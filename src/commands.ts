@@ -320,10 +320,10 @@ export const HELP_TEXT = [
   "| command | effect |",
   "| --- | --- |",
   "| `/router` | show routing status |",
-  "| `/router usable` | list every model the router can currently pick |",
-  "| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |",
+  "| `/router usable <agent?>` | list every model the router can currently pick |",
+  "| `/router refresh` | re-scan providers and re-route now, ignoring probe cache and cooldown |",
   "| `/router strategy <name>` | switch routing strategy and re-route now (session-only) |",
-  "| `/router pin <agent> <model>` | force one agent onto one model |",
+  "| `/router pin <agent> <model>` | force one agent onto one model, persisted |",
   "| `/router unpin <agent>` | drop one pin |",
   "| `/router unpin` | drop every pin |",
   "| `/router debug <model>` | show one model's capabilities and score breakdown |",
@@ -353,15 +353,14 @@ export async function handleRouterCommand(
       void say(status);
       break;
     case "usable":
-      if (!command.filter) {
-        void say(
-          formatUsable(config, modelStore, router, session.agent as AgentName),
-        );
-      } else {
-        void say(
-          `\`/router usable\` takes no arguments; got \`${command.filter}\`.`,
-        );
-      }
+      void say(
+        formatUsable(
+          config,
+          modelStore,
+          router,
+          (command.filter ?? session.agent) as AgentName,
+        ),
+      );
       break;
     case "refresh":
       void say("Refreshing the router...");
