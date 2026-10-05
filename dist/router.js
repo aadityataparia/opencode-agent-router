@@ -117,11 +117,9 @@ export class Router {
             if (this.modelStore.needsProbe(candidate.target)) {
                 const result = await this.probe(candidate);
                 this.modelStore.recordProbe(candidate.target, result, 60 * 1000); // 1 minute cooldown for probe results
-                if (result.verdict === "ok") {
-                    return candidate;
-                }
             }
-            else if (this.modelStore.getModel(candidate.target)?.lastProbeResult) {
+            if ((this.modelStore.getModel(candidate.target)?.health ?? 1) >=
+                this.config.current.minHealth) {
                 return candidate;
             }
         }

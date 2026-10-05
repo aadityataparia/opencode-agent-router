@@ -73,7 +73,7 @@ config — handy for a one-off `OCO_ROUTER_LOG=true opencode`.
 | `probeTimeoutMs` | `8000`            | how long a single probe may take                                                             |
 | `refreshMs`      | `300000` (5 mins) | how often to re-scan and re-assign                                                           |
 | `strategy`       | `adaptive`        | how to choose among healthy models: `adaptive`, `round-robin`, `weighted`, `latency`, `cost` |
-| `minHealth`      | `0.5`             | ignore models scoring below this, where 1 is perfect                                         |
+| `minHealth`      | `0.7`             | ignore models scoring below this, where 1 is perfect                                         |
 | `maxFallbacks`   | `5`               | how many alternatives to try for one role                                                    |
 | `presets`        | auto-detected     | which orchestrator plugins' agents to route                                                  |
 | `agents`         | `{}`              | custum agents to route                                                                       |

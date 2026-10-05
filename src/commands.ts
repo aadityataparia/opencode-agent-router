@@ -88,7 +88,7 @@ export function parseCommand(text: string): ParsedCommand {
 
   if (verb === "help" || verb === "?") return { kind: "help" };
 
-  if (verb === "unpin") {
+  if (verb === "unpin" || verb === "reset") {
     if (rest.length === 0) return { kind: "unpin-all" };
     if (rest.length > 1) {
       return {
@@ -98,8 +98,6 @@ export function parseCommand(text: string): ParsedCommand {
     }
     return { kind: "unpin", agent: rest[0] };
   }
-
-  if (verb === "reset") return { kind: "unpin-all" };
 
   if (verb === "usable" || verb === "models" || verb === "pool") {
     return { kind: "usable", filter: rest.join(" ") };
