@@ -7,7 +7,7 @@ import { probeModel } from "./probe";
 import { logger } from "./logger";
 import { handleRouterCommand } from "./commands";
 
-const ROUTER_COMMAND = "/router";
+const ROUTER_COMMAND = "router";
 
 export const setup: Plugin["setup"] = async (ctx) => {
   const plugins = await ctx.plugin.list();

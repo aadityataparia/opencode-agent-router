@@ -214,9 +214,9 @@ export function formatStatus(
   const lines: string[] = [];
 
   lines.push(
-    `**model-router** · ${config.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`,
+    `**model-router** · ${config.current.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`,
+    "",
   );
-  lines.push("");
 
   const routed = Array.from(router.cachedAssignments.keys());
   if (routed.length === 0) {

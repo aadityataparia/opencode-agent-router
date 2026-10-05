@@ -45,7 +45,7 @@ export class Config {
     return config;
   }
 
-  array<T>(key: keyof RouterConfig): T[] | undefined {
+  private array<T>(key: keyof RouterConfig): T[] | undefined {
     const value = this.raw[key];
     if (value === undefined) return undefined;
 
@@ -57,7 +57,7 @@ export class Config {
     return value as T[];
   }
 
-  boolean(key: keyof RouterConfig, defaultValue: boolean): boolean {
+  private boolean(key: keyof RouterConfig, defaultValue: boolean): boolean {
     const value = this.raw[key];
     if (value === undefined) return defaultValue;
 
@@ -69,7 +69,7 @@ export class Config {
     return value;
   }
 
-  positiveNumber(key: keyof RouterConfig): number {
+  private positiveNumber(key: keyof RouterConfig): number {
     const value = this.raw[key];
     if (value === undefined) return DEFAULTS[key] as number;
 
@@ -81,7 +81,11 @@ export class Config {
     return value;
   }
 
-  clampedNumber(key: keyof RouterConfig, min: number, max: number): number {
+  private clampedNumber(
+    key: keyof RouterConfig,
+    min: number,
+    max: number,
+  ): number {
     const value = this.raw[key];
     if (value === undefined) return DEFAULTS[key] as number;
 
@@ -95,7 +99,7 @@ export class Config {
     return value;
   }
 
-  strategy(): RoutingStrategy {
+  private strategy(): RoutingStrategy {
     const value = this.raw.strategy;
     if (value === undefined) return DEFAULTS.strategy as RoutingStrategy;
 
@@ -109,7 +113,7 @@ export class Config {
     return value;
   }
 
-  agents(): Record<string, AgentRequirements> {
+  private agents(): Record<string, AgentRequirements> {
     let value = this.raw.agents;
 
     if (typeof value !== "object" || Array.isArray(value)) {

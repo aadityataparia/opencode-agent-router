@@ -143,8 +143,7 @@ export function table(header, rows) {
 }
 export function formatStatus(config, store, router) {
     const lines = [];
-    lines.push(`**model-router** · ${config.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`);
-    lines.push("");
+    lines.push(`**model-router** · ${config.current.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`, "");
     const routed = Array.from(router.cachedAssignments.keys());
     if (routed.length === 0) {
         lines.push("No agents are in scope. Set `presets` in the plugin options, or declare an `agents` entry.");
