@@ -1,13 +1,11 @@
-import { Context, Plugin } from "@opencode/plugin/promise/plugin";
+import { Plugin } from "@opencode/plugin/promise/plugin";
 import { Config } from "./config";
 import { detectPresets } from "./presets";
 import { ModelStore } from "./model-store";
 import { Router } from "./router";
 import { probeModel } from "./probe";
 import { logger } from "./logger";
-import { AgentName, Candidate, routerAgentID } from "./types";
-import { Agent, Model, Provider } from "@opencode/client/effect";
-import { handleRouterCommand, parseCommand } from "./commands";
+import { handleRouterCommand } from "./commands";
 
 const ROUTER_COMMAND = "/router";
 
@@ -44,7 +42,7 @@ export const setup: Plugin["setup"] = async (ctx) => {
         const curSession = await ctx.session.get({
           sessionID: input.sessionID,
         });
-        handleRouterCommand(input.prompt.text, {
+        return handleRouterCommand(input.prompt.text, {
           config,
           modelStore,
           router,
@@ -70,10 +68,10 @@ ${text}
     });
   });
 
-  ctx.command.reload();
-  ctx.agent.reload();
+  await ctx.command.reload();
+  await ctx.agent.reload();
 
-  return () => {
-    commandDisposer.dispose();
+  return async () => {
+    await commandDisposer.dispose();
   };
 };

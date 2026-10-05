@@ -36,11 +36,15 @@ export class ModelStore {
         return this.state.get(target);
     }
     setModel(model) {
-        this.storage.set(MODEL_STATE_KEY + model.target, model);
+        void this.storage.set(MODEL_STATE_KEY + model.target, model);
         this.state.set(model.target, model);
     }
-    getAllModels() {
-        return Array.from(this.state.values());
+    getAllModels(filter) {
+        let models = Array.from(this.state.values());
+        if (filter) {
+            models = models.filter((model) => model.target.includes(filter));
+        }
+        return models;
     }
     success(model, latencyMs) {
         const current = this.state.get(model.target);

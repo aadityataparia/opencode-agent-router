@@ -10,7 +10,7 @@ export declare class ModelStore {
     setCatalog(catalog: ModelInfo[]): Promise<void>;
     getModel(target: string): DiscoveredModel | undefined;
     setModel(model: DiscoveredModel): void;
-    getAllModels(): DiscoveredModel[];
+    getAllModels(filter?: string): DiscoveredModel[];
     private success;
     private failure;
     private isCoolingDown;
