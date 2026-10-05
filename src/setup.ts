@@ -7,41 +7,9 @@ import { probeModel } from "./probe";
 import { logger } from "./logger";
 import { AgentName, Candidate, routerAgentID } from "./types";
 import { Agent, Model, Provider } from "@opencode/client/effect";
+import { handleRouterCommand, parseCommand } from "./commands";
 
-const assignModels = async (
-  assignments: Map<AgentName, Pick<Candidate, "id" | "providerID"> | undefined>,
-  ctxAgent: Context["agent"],
-) => {
-  await ctxAgent.transform((editor) => {
-    let assigned = 0;
-    const failed: string[] = [];
-
-    for (const [agentName, ref] of assignments) {
-      if (!ref) continue;
-
-      const model = {
-        providerID: Provider.ID.make(ref.providerID),
-        id: Model.ID.make(ref.id),
-      };
-      for (const id of [routerAgentID(agentName), agentName]) {
-        try {
-          editor.update(id, (agent) => {
-            agent.id = Agent.ID.make(id);
-            agent.name = Agent.Name.make(agentName);
-            agent.model = model;
-          });
-          assigned += 1;
-        } catch (error) {
-          failed.push(`${id}: ${String(error)}`);
-        }
-      }
-    }
-    logger.log(
-      `agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
-        (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
-    );
-  });
-};
+const ROUTER_COMMAND = "/router";
 
 export const setup: Plugin["setup"] = async (ctx) => {
   const plugins = await ctx.plugin.list();
@@ -52,15 +20,60 @@ export const setup: Plugin["setup"] = async (ctx) => {
 
   await modelStore.setCatalog(catalog.data);
 
-  const router = new Router(modelStore, config, ctx.storage);
+  const router = new Router(
+    modelStore,
+    config,
+    ctx.storage,
+    (model) =>
+      probeModel(model, {
+        generate: ctx.generate.text,
+        timeoutMs: config.current.probeTimeoutMs,
+      }),
+    ctx.agent,
+  );
   await router.init();
 
-  const assignments = await router.getAssignments((model) =>
-    probeModel(model, {
-      generate: ctx.generate.text,
-      timeoutMs: config.current.probeTimeoutMs,
-    }),
-  );
+  await router.assignModels();
 
-  await assignModels(assignments, ctx.agent);
+  const commandDisposer = await ctx.command.transform((editor) => {
+    editor.add({
+      name: ROUTER_COMMAND,
+      description:
+        "Inspect and steer the model router: status, refresh, pin an agent to a model",
+      execute: async (input) => {
+        const curSession = await ctx.session.get({
+          sessionID: input.sessionID,
+        });
+        handleRouterCommand(input.prompt.text, {
+          config,
+          modelStore,
+          router,
+          session: curSession,
+          say: async (text: string) => {
+            try {
+              await ctx.session.synthetic({
+                sessionID: input.sessionID,
+                text: `Print this message as is without quotes:
+"""
+${text}
+"""`,
+              });
+            } catch (error) {
+              logger.error(
+                "could not post /router output to the session",
+                error,
+              );
+            }
+          },
+        });
+      },
+    });
+  });
+
+  ctx.command.reload();
+  ctx.agent.reload();
+
+  return () => {
+    commandDisposer.dispose();
+  };
 };

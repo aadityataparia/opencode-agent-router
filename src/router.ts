@@ -1,13 +1,17 @@
-import type {
-  AgentName,
-  Candidate,
-  ProbeResult,
-  RoutingStrategy,
+import {
+  routerAgentID,
+  type AgentName,
+  type Candidate,
+  type ProbeResult,
+  type RoutingStrategy,
 } from "./types";
 import { ModelStore } from "./model-store";
 import { findCandidates } from "./scorer";
 import { Config } from "./config";
 import { StorageDomain } from "@opencode/plugin/promise/storage";
+import { Agent, Model, Provider } from "@opencode/plugin";
+import { Context } from "@opencode/plugin/promise/plugin";
+import { logger } from "./logger";
 
 type CompactModel = Pick<Candidate, "id" | "providerID" | "target">;
 
@@ -15,23 +19,27 @@ const PIN_KEY = "model-router:pins";
 const ASSIGNMENT_KEY = "model-router:assignments";
 
 export class Router {
-  private readonly candidates = new Map<AgentName, Candidate[]>();
-  private readonly pins = new Map<AgentName, string>();
+  readonly candidates = new Map<AgentName, Candidate[]>();
+  readonly pins = new Map<AgentName, string>();
   readonly cachedAssignments = new Map<AgentName, CompactModel | undefined>();
+  readonly discovered: number;
 
   constructor(
     private readonly modelStore: ModelStore,
     private readonly config: Config,
     private readonly storage: StorageDomain,
+    readonly probe: (
+      model: Pick<Candidate, "id" | "providerID">,
+    ) => Promise<ProbeResult>,
+    private readonly ctxAgent: Context["agent"],
   ) {
+    const allModels = modelStore.getAllModels();
+    this.discovered = allModels.length;
     for (const agent of Object.keys(config.current.agents) as AgentName[]) {
       this.candidates.set(
         agent,
         this.sort(
-          findCandidates(
-            this.config.current.agents[agent]!,
-            this.modelStore.getAllModels(),
-          ),
+          findCandidates(this.config.current.agents[agent]!, allModels),
           this.config.current.strategy,
         ),
       );
@@ -58,9 +66,9 @@ export class Router {
     }
   }
 
-  async getAssignments(
-    probe: (model: Candidate) => Promise<ProbeResult>,
-  ): Promise<Map<AgentName, CompactModel | undefined>> {
+  private async getAssignments(): Promise<
+    Map<AgentName, CompactModel | undefined>
+  > {
     for (const agent of Object.keys(
       this.config.current.agents,
     ) as AgentName[]) {
@@ -69,7 +77,7 @@ export class Router {
         this.cachedAssignments.has(agent) &&
         ["cost", "adaptive"].includes(this.config.current.strategy)
       ) {
-        const probeResult = await probe(
+        const probeResult = await this.probe(
           this.cachedAssignments.get(agent) as Candidate,
         );
         if (probeResult.verdict === "ok") {
@@ -77,7 +85,7 @@ export class Router {
         }
       }
 
-      const result = await this.choose(agent, probe);
+      const result = await this.choose(agent);
       this.cachedAssignments.set(
         agent,
         result ?? this.candidates.get(agent)?.[0],
@@ -88,6 +96,9 @@ export class Router {
   }
 
   pin(agent: AgentName, modelTarget: string): void {
+    if (!this.modelStore.getModel(modelTarget)) {
+      throw new Error(`Cannot pin unknown model: ${modelTarget}`);
+    }
     this.pins.set(agent, modelTarget);
   }
 
@@ -95,10 +106,40 @@ export class Router {
     this.pins.delete(agent);
   }
 
-  private async choose(
-    agent: AgentName,
-    probe: (model: Candidate) => Promise<ProbeResult>,
-  ): Promise<CompactModel | undefined> {
+  async assignModels(): Promise<{ dispose: () => void }> {
+    const assignments = await this.getAssignments();
+    return await this.ctxAgent.transform((editor) => {
+      let assigned = 0;
+      const failed: string[] = [];
+
+      for (const [agentName, ref] of assignments) {
+        if (!ref) continue;
+
+        const model = {
+          providerID: Provider.ID.make(ref.providerID),
+          id: Model.ID.make(ref.id),
+        };
+        for (const id of [routerAgentID(agentName), agentName]) {
+          try {
+            editor.update(id, (agent) => {
+              agent.id = Agent.ID.make(id);
+              agent.name = Agent.Name.make(agentName);
+              agent.model = model;
+            });
+            assigned += 1;
+          } catch (error) {
+            failed.push(`${id}: ${String(error)}`);
+          }
+        }
+      }
+      logger.log(
+        `agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
+          (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
+      );
+    });
+  }
+
+  private async choose(agent: AgentName): Promise<CompactModel | undefined> {
     if (!this.config.current.agents[agent]) return undefined;
 
     const candidates = this.sort(
@@ -115,19 +156,18 @@ export class Router {
       }
     }
 
-    return this.probeAndSelect(agent, probe);
+    return this.probeAndSelect(agent);
   }
 
   private async probeAndSelect(
     agent: AgentName,
-    probe: (model: Candidate) => Promise<ProbeResult>,
   ): Promise<Candidate | undefined> {
     const candidates = this.candidates.get(agent);
     if (!candidates || candidates.length === 0) return undefined;
 
     for (const candidate of candidates) {
       if (this.modelStore.needsProbe(candidate.target)) {
-        const result = await probe(candidate);
+        const result = await this.probe(candidate);
         this.modelStore.recordProbe(candidate.target, result, 60 * 1000); // 1 minute cooldown for probe results
         if (result.verdict === "ok") {
           return candidate;

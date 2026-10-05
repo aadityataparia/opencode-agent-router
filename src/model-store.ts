@@ -46,15 +46,19 @@ export class ModelStore {
   }
 
   setModel(model: DiscoveredModel): void {
-    this.storage.set(
+    void this.storage.set(
       MODEL_STATE_KEY + model.target,
       model as unknown as JsonValue,
     );
     this.state.set(model.target, model);
   }
 
-  getAllModels(): DiscoveredModel[] {
-    return Array.from(this.state.values());
+  getAllModels(filter?: string): DiscoveredModel[] {
+    let models = Array.from(this.state.values());
+    if (filter) {
+      models = models.filter((model) => model.target.includes(filter));
+    }
+    return models;
   }
 
   private success(model: DiscoveredModel, latencyMs: number): void {
