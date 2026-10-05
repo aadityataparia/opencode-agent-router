@@ -358,7 +358,7 @@ export async function handleRouterCommand(
           config,
           modelStore,
           router,
-          (command.filter ?? session.agent) as AgentName,
+          (command.filter || session.agent) as AgentName,
         ),
       );
       break;

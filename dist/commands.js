@@ -234,7 +234,7 @@ export async function handleRouterCommand(prompt, context) {
             void say(status);
             break;
         case "usable":
-            void say(formatUsable(config, modelStore, router, (command.filter ?? session.agent)));
+            void say(formatUsable(config, modelStore, router, (command.filter || session.agent)));
             break;
         case "refresh":
             void say("Refreshing the router...");
