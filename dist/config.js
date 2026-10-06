@@ -3,8 +3,7 @@ import { logger } from "./logger";
 import { presetAgentNames } from "./presets";
 import { STRATEGY_NAMES, } from "./types";
 const DEFAULTS = {
-    refreshMs: 60 * 60_000,
-    maxFallbacks: 5,
+    refreshMs: 60_000,
     probeTimeoutMs: 8_000,
     strategy: "adaptive",
     minHealth: 0.7,
@@ -21,7 +20,6 @@ export class Config {
     get current() {
         const config = {
             refreshMs: this.positiveNumber("refreshMs"),
-            maxFallbacks: Math.max(1, Math.floor(this.positiveNumber("maxFallbacks"))),
             probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
             strategy: this.strategy(),
             minHealth: this.clampedNumber("minHealth", 0, 1),

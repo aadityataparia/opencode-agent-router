@@ -13,4 +13,4 @@ export interface AgentSync {
  * Creates missing agent files and prunes ones for roles no longer routed.
  * Best-effort: an unwritable config directory is reported, not thrown.
  */
-export declare function syncRoutedAgents(names: readonly AgentName[], models?: Map<AgentName, CompactModel | undefined>, onWarn?: (message: string) => void): AgentSync;
+export declare function syncRoutedAgents(models?: Map<AgentName, CompactModel | undefined>): AgentSync;

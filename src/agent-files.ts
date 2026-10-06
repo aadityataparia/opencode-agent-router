@@ -14,6 +14,7 @@ import {
   CompactModel,
   ROUTER_AGENT_PREFIX,
 } from "./types";
+import { logger } from "./logger";
 
 /**
  * Writes `model-router/<agent>` Markdown files under `~/.config/opencode/agents/`,
@@ -88,9 +89,7 @@ export interface AgentSync {
  * Best-effort: an unwritable config directory is reported, not thrown.
  */
 export function syncRoutedAgents(
-  names: readonly AgentName[],
   models: Map<AgentName, CompactModel | undefined> = new Map(),
-  onWarn: (message: string) => void = () => {},
 ): AgentSync {
   const created: string[] = [];
   const updated: string[] = [];
@@ -101,20 +100,19 @@ export function syncRoutedAgents(
   try {
     mkdirSync(dir, { recursive: true });
   } catch (error) {
-    onWarn(`could not create ${dir}: ${describeError(error)}`);
+    logger.warn(`could not create ${dir}: ${describeError(error)}`);
     return { created, updated, removed, kept };
   }
 
   const routed = new Set<string>();
-  for (const name of names) {
+  for (const [name, ref] of models) {
     if (!SAFE_NAME.test(name)) {
-      onWarn(`skipping agent ${name}: not a safe file name`);
+      logger.warn(`skipping agent ${name}: not a safe file name`);
       continue;
     }
     routed.add(name);
 
     const file = join(dir, `${name}.md`);
-    const ref = models.get(name);
     const wanted = document(name, ref?.target);
 
     if (existsSync(file)) {
@@ -122,7 +120,7 @@ export function syncRoutedAgents(
       try {
         current = readFileSync(file, "utf8");
       } catch (error) {
-        onWarn(`could not read ${file}: ${describeError(error)}`);
+        logger.warn(`could not read ${file}: ${describeError(error)}`);
         continue;
       }
       // Rewrite only our own file, and only when the model actually moved. A
@@ -132,7 +130,7 @@ export function syncRoutedAgents(
           writeFileSync(file, wanted, "utf8");
           updated.push(`${ROUTER_AGENT_PREFIX}${name}`);
         } catch (error) {
-          onWarn(`could not update ${file}: ${describeError(error)}`);
+          logger.warn(`could not update ${file}: ${describeError(error)}`);
         }
       }
       continue;
@@ -142,7 +140,7 @@ export function syncRoutedAgents(
       writeFileSync(file, wanted, "utf8");
       created.push(`${ROUTER_AGENT_PREFIX}${name}`);
     } catch (error) {
-      onWarn(`could not write ${file}: ${describeError(error)}`);
+      logger.warn(`could not write ${file}: ${describeError(error)}`);
     }
   }
 
@@ -155,14 +153,14 @@ export function syncRoutedAgents(
     try {
       current = readFileSync(file, "utf8");
     } catch (error) {
-      onWarn(`could not read ${file}: ${describeError(error)}`);
+      logger.warn(`could not read ${file}: ${describeError(error)}`);
       continue;
     }
 
     // Only ever delete a file still byte-for-byte what we would have written.
     if (!isOurs(name, current)) {
       kept.push(`${ROUTER_AGENT_PREFIX}${name}`);
-      onWarn(
+      logger.warn(
         `keeping ${file}: it is not the router's own, so removing it is left to you`,
       );
       continue;
@@ -171,7 +169,7 @@ export function syncRoutedAgents(
       rmSync(file);
       removed.push(`${ROUTER_AGENT_PREFIX}${name}`);
     } catch (error) {
-      onWarn(`could not remove ${file}: ${describeError(error)}`);
+      logger.warn(`could not remove ${file}: ${describeError(error)}`);
     }
   }
 

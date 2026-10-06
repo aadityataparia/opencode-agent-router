@@ -75,7 +75,6 @@ export interface Candidate {
 }
 export interface RouterConfig {
     refreshMs: number;
-    maxFallbacks: number;
     probeTimeoutMs: number;
     strategy: RoutingStrategy;
     minHealth: number;
