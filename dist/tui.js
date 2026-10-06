@@ -59,8 +59,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                     current: route.agent === current?.agent,
                     // An unassigned route has no target, so it must never compare equal
                     // to the selection and claim to be the model in use.
-                    currentModel: route.target !== undefined &&
-                        route.target === selected?.target,
+                    currentModel: route.target !== undefined && route.target === selected?.target,
                     variant: route.agent === current?.agent ? selected?.variant : undefined,
                 })),
                 ...emptyState(theme, routes, current, expanded),
@@ -217,11 +216,9 @@ function toRoutes(agents) {
         if (!agent.id.startsWith(ROUTER_AGENT_PREFIX))
             continue;
         const model = agent.model;
-        if (!model)
-            continue;
         routes.push({
             agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-            target: `${model.providerID}/${model.id}`,
+            target: model ? `${model.providerID}/${model.id}` : "no usable model",
         });
     }
     return routes.sort((a, b) => a.agent.localeCompare(b.agent));
