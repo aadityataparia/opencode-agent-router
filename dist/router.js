@@ -38,14 +38,6 @@ export class Router {
     async getAssignments(agents) {
         const agentsToProcess = agents || Object.keys(this.config.current.agents);
         for (const agent of agentsToProcess) {
-            // just probe if we already have model, to avoid changing models all the time
-            if (this.cachedAssignments.has(agent) &&
-                ["cost", "adaptive"].includes(this.config.current.strategy)) {
-                const probeResult = await this.probe(this.cachedAssignments.get(agent));
-                if (probeResult.verdict === "ok") {
-                    continue;
-                }
-            }
             const result = await this.choose(agent);
             this.cachedAssignments.set(agent, result ??
                 this.cachedAssignments.get(agent) ??
@@ -134,6 +126,9 @@ export class Router {
             if (this.modelStore.needsProbe(candidate.target)) {
                 const result = await this.probe(candidate);
                 this.modelStore.recordProbe(candidate.target, result, 60 * 1000); // 1 minute cooldown for probe results
+                if (result.verdict !== "ok" && result.verdict !== "inconclusive") {
+                    continue;
+                }
             }
             if ((this.modelStore.getModel(candidate.target)?.health ?? 1) >=
                 this.config.current.minHealth) {
