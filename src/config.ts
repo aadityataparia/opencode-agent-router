@@ -35,22 +35,24 @@ export class Config {
       probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
       strategy: this.strategy(),
       minHealth: this.clampedNumber("minHealth", 0, 1),
-      presets: this.array("presets") ?? this.detectedPresets,
+      presets: this.array("presets", this.detectedPresets),
       agents: this.agents(),
-      ignoredProviders: this.array("ignoredProviders") ?? [],
+      ignoredProviders: this.array("ignoredProviders", []),
     };
 
     return config;
   }
 
-  private array<T>(key: keyof RouterConfig): T[] | undefined {
+  private array<T>(key: keyof RouterConfig, defaultValue: T[]): T[] {
     const value = this.raw[key];
-    if (value === undefined) return undefined;
+    if (value === undefined) return defaultValue;
 
     if (!Array.isArray(value)) {
       logger.trace(`ignoring ${key}: expected an array`);
-      return undefined;
+      return defaultValue;
     }
+
+    if (value.length === 0) return defaultValue;
 
     return value as T[];
   }
