@@ -99,4 +99,5 @@ export interface ProbeResult {
     readonly status?: number;
     readonly error?: string;
 }
+export type CompactModel = Pick<Candidate, "id" | "providerID" | "target">;
 export {};

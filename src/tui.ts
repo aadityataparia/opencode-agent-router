@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
 
@@ -7,6 +7,17 @@ const ROUTER_AGENT_PREFIX = "model-router/";
 const REFRESH_MS = 1_000;
 
 const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
+
+/** The trace is a breadcrumb log, not an audit trail: keep it from growing without bound. */
+const TRACE_LIMIT = 500;
+
+interface TraceEntry {
+  readonly at: string;
+  readonly event: string;
+}
+
+/** Read once per process; the file is rewritten whole on every append anyway. */
+let traceEntries: TraceEntry[] | undefined;
 
 interface SelectedModel {
   readonly providerID: string;
@@ -30,7 +41,21 @@ type BaseRenderable = ReturnType<typeof createElement>;
 function trace(event: string): void {
   if (!TRACE) return;
   try {
-    appendFileSync(TRACE, `${new Date().toISOString()} ${event}\n`);
+    if (!traceEntries) {
+      // A missing, unreadable, or non-array file (a stale JSONL trace, say)
+      // restarts the log rather than failing the write.
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(TRACE, "utf8"));
+        traceEntries = Array.isArray(parsed) ? (parsed as TraceEntry[]) : [];
+      } catch {
+        traceEntries = [];
+      }
+    }
+    traceEntries.push({ at: new Date().toISOString(), event });
+    if (traceEntries.length > TRACE_LIMIT) {
+      traceEntries.splice(0, traceEntries.length - TRACE_LIMIT);
+    }
+    writeFileSync(TRACE, JSON.stringify(traceEntries, null, 2) + "\n", "utf8");
   } catch {
     // Tracing must never break the sidebar.
   }

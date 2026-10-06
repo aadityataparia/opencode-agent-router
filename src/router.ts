@@ -1,4 +1,5 @@
 import {
+  CompactModel,
   routerAgentID,
   type AgentName,
   type Candidate,
@@ -12,8 +13,7 @@ import { StorageDomain } from "@opencode/plugin/promise/storage";
 import { Agent, Model, Provider } from "@opencode/plugin";
 import { Context } from "@opencode/plugin/promise/plugin";
 import { logger } from "./logger";
-
-type CompactModel = Pick<Candidate, "id" | "providerID" | "target">;
+import { syncRoutedAgents } from "./agent-files";
 
 const PIN_KEY = "model-router:pins";
 const ASSIGNMENT_KEY = "model-router:assignments";
@@ -28,9 +28,7 @@ export class Router {
     private readonly modelStore: ModelStore,
     private readonly config: Config,
     private readonly storage: StorageDomain,
-    readonly probe: (
-      model: Pick<Candidate, "id" | "providerID">,
-    ) => Promise<ProbeResult>,
+    readonly probe: (model: CompactModel) => Promise<ProbeResult>,
     private readonly ctxAgent: Context["agent"],
   ) {
     const allModels = modelStore.getAllModels();
@@ -132,6 +130,13 @@ export class Router {
           }
         }
       }
+      syncRoutedAgents(
+        Array.from(assignments.keys()),
+        assignments,
+        (message) => {
+          logger.warn(`syncRoutedAgents: ${message}`);
+        },
+      );
       logger.log(
         `agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),

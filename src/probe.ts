@@ -1,4 +1,9 @@
-import type { DiscoveredModel, ProbeResult, ProbeVerdict } from "./types";
+import type {
+  CompactModel,
+  DiscoveredModel,
+  ProbeResult,
+  ProbeVerdict,
+} from "./types";
 import { Context } from "@opencode/plugin/promise/plugin";
 
 /**
@@ -86,7 +91,7 @@ const hasError = (reply: string) => {
 };
 
 export async function probeModel(
-  model: Pick<DiscoveredModel, "id" | "providerID">,
+  model: CompactModel,
   options: ProbeOptions,
 ): Promise<ProbeResult> {
   const started = Date.now();

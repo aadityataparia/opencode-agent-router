@@ -1,4 +1,4 @@
-import type { DiscoveredModel, ProbeResult } from "./types";
+import type { CompactModel, ProbeResult } from "./types";
 import { Context } from "@opencode/plugin/promise/plugin";
 /**
  * Probes go through OpenCode's own generate API, so they use the real endpoint,
@@ -17,6 +17,6 @@ export interface ProbeOptions {
     readonly generate: Context["generate"]["text"];
     readonly timeoutMs: number;
 }
-export declare function probeModel(model: Pick<DiscoveredModel, "id" | "providerID">, options: ProbeOptions): Promise<ProbeResult>;
+export declare function probeModel(model: CompactModel, options: ProbeOptions): Promise<ProbeResult>;
 /** Runs `worker` over `items`, at most `limit` at a time, preserving order. */
 export declare function mapWithConcurrency<T, R>(items: readonly T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]>;
