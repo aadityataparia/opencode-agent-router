@@ -13,6 +13,14 @@ export const setup = async (ctx) => {
     const detected = detectPresets(plugins.data);
     logger.log(`plugin registry: ${Array.isArray(plugins?.data) ? plugins.data.length : "non-array"} entries` +
         ` -> presets ${JSON.stringify(detected)}`);
+    // TEMP DIAGNOSTIC: does the agent registry know OMO's agents yet?
+    {
+        const agents = await ctx.agent.list();
+        const ids = agents.data.map((a) => a.id);
+        const omoish = ids.filter((id) => /^(orchestrator|explorer|librarian|oracle|designer|fixer|observer|council|councillor)$/.test(id));
+        logger.log(`agent registry: ${ids.length} agents, ${omoish.length} OMO-named` +
+            ` [${omoish.join(",")}]`);
+    }
     const config = new Config(ctx.options, detected);
     const modelStore = new ModelStore(ctx.storage, config);
     await modelStore.setCatalog(catalog.data);
