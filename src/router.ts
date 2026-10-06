@@ -72,7 +72,9 @@ export class Router {
       const result = await this.choose(agent);
       this.cachedAssignments.set(
         agent,
-        result ?? this.getCandidates(agent)?.[0],
+        result ??
+          this.cachedAssignments.get(agent) ??
+          this.getCandidates(agent)?.[0],
       );
     }
 

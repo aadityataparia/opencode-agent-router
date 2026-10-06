@@ -1,45 +1,17 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
+import { logger } from "./logger";
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
 const REFRESH_MS = 1_000;
-const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
-/** The trace is a breadcrumb log, not an audit trail: keep it from growing without bound. */
-const TRACE_LIMIT = 500;
 /** Read once per process; the file is rewritten whole on every append anyway. */
 let traceEntries;
-/** Opt-in breadcrumb for verifying this plugin inside a real TUI. */
-function trace(event) {
-    if (!TRACE)
-        return;
-    try {
-        if (!traceEntries) {
-            // A missing, unreadable, or non-array file (a stale JSONL trace, say)
-            // restarts the log rather than failing the write.
-            try {
-                const parsed = JSON.parse(readFileSync(TRACE, "utf8"));
-                traceEntries = Array.isArray(parsed) ? parsed : [];
-            }
-            catch {
-                traceEntries = [];
-            }
-        }
-        traceEntries.push({ at: new Date().toISOString(), event });
-        if (traceEntries.length > TRACE_LIMIT) {
-            traceEntries.splice(0, traceEntries.length - TRACE_LIMIT);
-        }
-        writeFileSync(TRACE, JSON.stringify(traceEntries, null, 2) + "\n", "utf8");
-    }
-    catch {
-        // Tracing must never break the sidebar.
-    }
-}
 export const OpenCodeAgentRouterTui = Plugin.define({
     id: "opencode-agent-router.tui",
     setup: (ctx) => {
         const theme = ctx.theme;
-        trace(`setup version=${readVersion()}`);
+        logger.trace(`setup version=${readVersion()}`);
         let expanded = false;
         let disposed = false;
         let disposeSlot;
@@ -49,14 +21,14 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                 const result = await ctx.client.agent.list({});
                 const agents = result.data ?? [];
                 routes = toRoutes(agents);
-                trace(`agent.list total=${agents.length} routed=${routes.length} ids=${agents
+                logger.trace(`agent.list total=${agents.length} routed=${routes.length} ids=${agents
                     .map((a) => a.id)
                     .join("|")}, models=${agents
                     .map((a) => a.model?.providerID + "/" + a.model?.id)
                     .join("|")}`);
             }
             catch (error) {
-                trace(`agent.list failed ${String(error)}`);
+                logger.trace(`agent.list failed ${String(error)}`);
             }
         };
         const build = () => {
@@ -73,14 +45,14 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                 : current
                     ? [current]
                     : [];
-            trace(`render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`);
+            logger.trace(`render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`);
             return column({
                 width: "100%",
                 border: "rounded",
             }, [
                 header(theme, readVersion(), expanded, routes.length, () => {
                     expanded = !expanded;
-                    trace(`toggle expanded=${expanded}`);
+                    logger.trace(`toggle expanded=${expanded}`);
                     rebuild();
                 }),
                 ...visible.map((route) => routeRow(theme, route, {
@@ -106,7 +78,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         let signature = "";
         // The event is a nudge; the rebuild re-reads state, so it carries no data.
         const onChange = (label) => {
-            trace(label);
+            logger.trace(label);
             void refreshRoutes().then(() => {
                 rebuild();
                 // Re-seed so the poll does not rebuild the same tree again.
@@ -126,7 +98,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                 if (next === signature)
                     return;
                 signature = next;
-                trace(`change ${next}`);
+                logger.trace(`change ${next}`);
                 rebuild();
             });
         }, REFRESH_MS);

@@ -1,15 +1,11 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
+import { logger } from "./logger";
 
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
 const REFRESH_MS = 1_000;
-
-const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
-
-/** The trace is a breadcrumb log, not an audit trail: keep it from growing without bound. */
-const TRACE_LIMIT = 500;
 
 interface TraceEntry {
   readonly at: string;
@@ -37,35 +33,11 @@ type TuiLocation = ReturnType<TuiContext["data"]["location"]["default"]>;
 type Theme = TuiContext["theme"];
 type BaseRenderable = ReturnType<typeof createElement>;
 
-/** Opt-in breadcrumb for verifying this plugin inside a real TUI. */
-function trace(event: string): void {
-  if (!TRACE) return;
-  try {
-    if (!traceEntries) {
-      // A missing, unreadable, or non-array file (a stale JSONL trace, say)
-      // restarts the log rather than failing the write.
-      try {
-        const parsed: unknown = JSON.parse(readFileSync(TRACE, "utf8"));
-        traceEntries = Array.isArray(parsed) ? (parsed as TraceEntry[]) : [];
-      } catch {
-        traceEntries = [];
-      }
-    }
-    traceEntries.push({ at: new Date().toISOString(), event });
-    if (traceEntries.length > TRACE_LIMIT) {
-      traceEntries.splice(0, traceEntries.length - TRACE_LIMIT);
-    }
-    writeFileSync(TRACE, JSON.stringify(traceEntries, null, 2) + "\n", "utf8");
-  } catch {
-    // Tracing must never break the sidebar.
-  }
-}
-
 export const OpenCodeAgentRouterTui = Plugin.define({
   id: "opencode-agent-router.tui",
   setup: (ctx: TuiContext) => {
     const theme = ctx.theme;
-    trace(`setup version=${readVersion()}`);
+    logger.trace(`setup version=${readVersion()}`);
 
     let expanded = false;
     let disposed = false;
@@ -77,7 +49,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         const result = await ctx.client.agent.list({});
         const agents = result.data ?? [];
         routes = toRoutes(agents);
-        trace(
+        logger.trace(
           `agent.list total=${agents.length} routed=${routes.length} ids=${agents
             .map((a) => a.id)
             .join("|")}, models=${agents
@@ -85,7 +57,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
             .join("|")}`,
         );
       } catch (error) {
-        trace(`agent.list failed ${String(error)}`);
+        logger.trace(`agent.list failed ${String(error)}`);
       }
     };
 
@@ -105,7 +77,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
           ? [current]
           : [];
 
-      trace(
+      logger.trace(
         `render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`,
       );
 
@@ -117,7 +89,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         [
           header(theme, readVersion(), expanded, routes.length, () => {
             expanded = !expanded;
-            trace(`toggle expanded=${expanded}`);
+            logger.trace(`toggle expanded=${expanded}`);
             rebuild();
           }),
           ...visible.map((route) =>
@@ -150,7 +122,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
 
     // The event is a nudge; the rebuild re-reads state, so it carries no data.
     const onChange = (label: string): void => {
-      trace(label);
+      logger.trace(label);
       void refreshRoutes().then(() => {
         rebuild();
         // Re-seed so the poll does not rebuild the same tree again.
@@ -175,7 +147,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         const next = stateSignature(ctx, routes);
         if (next === signature) return;
         signature = next;
-        trace(`change ${next}`);
+        logger.trace(`change ${next}`);
         rebuild();
       });
     }, REFRESH_MS);

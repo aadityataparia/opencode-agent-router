@@ -89,8 +89,8 @@ export class Config {
             logger.trace(`ignoring options.agents: expected an object of agent names`);
             value = {};
         }
-        const presets = presetAgentNames(this.raw.presets ?? this.detectedPresets);
-        const origin = this.raw.presets ? "options" : "detected";
+        const presets = presetAgentNames(this.array("presets", this.detectedPresets));
+        const origin = this.raw.presets?.length ? "options" : "detected";
         const overridden = this.raw.agents
             ? Object.keys(this.raw.agents)
             : undefined;

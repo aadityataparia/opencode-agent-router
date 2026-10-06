@@ -46,7 +46,9 @@ export class Router {
                 }
             }
             const result = await this.choose(agent);
-            this.cachedAssignments.set(agent, result ?? this.getCandidates(agent)?.[0]);
+            this.cachedAssignments.set(agent, result ??
+                this.cachedAssignments.get(agent) ??
+                this.getCandidates(agent)?.[0]);
         }
         return this.cachedAssignments;
     }

@@ -127,9 +127,11 @@ export class Config {
       value = {};
     }
 
-    const presets = presetAgentNames(this.raw.presets ?? this.detectedPresets);
+    const presets = presetAgentNames(
+      this.array("presets", this.detectedPresets),
+    );
 
-    const origin = this.raw.presets ? "options" : "detected";
+    const origin = this.raw.presets?.length ? "options" : "detected";
     const overridden = this.raw.agents
       ? Object.keys(this.raw.agents)
       : undefined;
