@@ -60,12 +60,12 @@ export class Router {
             let assigned = 0;
             const failed = [];
             for (const [agentName, ref] of assignments) {
-                if (!ref)
-                    continue;
-                const model = {
-                    providerID: Provider.ID.make(ref.providerID),
-                    id: Model.ID.make(ref.id),
-                };
+                const model = ref
+                    ? {
+                        providerID: Provider.ID.make(ref.providerID),
+                        id: Model.ID.make(ref.id),
+                    }
+                    : undefined;
                 for (const id of [routerAgentID(agentName), agentName]) {
                     try {
                         editor.update(id, (agent) => {
