@@ -113,7 +113,7 @@ export class Router {
           try {
             editor.update(id, (agent) => {
               agent.id = Agent.ID.make(id);
-              agent.name = Agent.Name.make(agentName);
+              agent.name = Agent.Name.make(id);
               agent.model = model;
             });
             assigned += 1;
