@@ -127,7 +127,7 @@ export function syncRoutedAgents(
       }
       // Rewrite only our own file, and only when the model actually moved. A
       // hand-edited file is left exactly as it is.
-      if (current !== wanted && isOurs(name, current)) {
+      if (current !== wanted) {
         try {
           writeFileSync(file, wanted, "utf8");
           updated.push(`${ROUTER_AGENT_PREFIX}${name}`);
