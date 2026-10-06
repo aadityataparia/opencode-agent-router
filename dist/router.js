@@ -39,9 +39,7 @@ export class Router {
         const agentsToProcess = agents || Object.keys(this.config.current.agents);
         for (const agent of agentsToProcess) {
             const result = await this.choose(agent);
-            this.cachedAssignments.set(agent, result ??
-                this.cachedAssignments.get(agent) ??
-                this.getCandidates(agent)?.[0]);
+            this.cachedAssignments.set(agent, result);
         }
         return this.cachedAssignments;
     }
