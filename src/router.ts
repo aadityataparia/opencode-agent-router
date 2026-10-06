@@ -122,13 +122,13 @@ export class Router {
           }
         }
       }
-      syncRoutedAgents(
-        Array.from(assignments.keys()),
-        assignments,
-        (message) => {
-          logger.warn(`syncRoutedAgents: ${message}`);
-        },
-      );
+      // syncRoutedAgents(
+      //   Array.from(assignments.keys()),
+      //   assignments,
+      //   (message) => {
+      //     logger.warn(`syncRoutedAgents: ${message}`);
+      //   },
+      // );
       logger.log(
         `agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
