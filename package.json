@@ -13,7 +13,8 @@
   "dependencies": {
     "@opencode/client": "2.0.18",
     "@opencode/plugin": "2.0.18",
-    "@opentui/solid": "^0.5.14"
+    "@opentui/solid": "^0.5.14",
+    "confbox": "^0.3.1"
   },
   "devDependencies": {
     "@opencode/theme": "^2.0.18",

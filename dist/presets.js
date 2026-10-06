@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { homedir } from "node:os";
 import { logger } from "./logger";
 import { readFileSync } from "node:fs";
+import { parseJSON5, parseJSONC } from "confbox";
 const OMO_BUILTIN_AGENTS = [
     "sisyphus",
     "hephaestus",
@@ -49,11 +50,18 @@ export function detectPresets(plugins) {
     const foundFromFile = [];
     for (const file of files) {
         try {
-            const config = JSON.parse(readFileSync(file, { encoding: "utf-8" }));
-            if (config?.presets) {
-                for (const preset of config.presets) {
-                    if (PRESET_NAMES.includes(preset)) {
-                        foundFromFile.push(preset);
+            const config = (file.endsWith(".jsonc")
+                ? parseJSONC(readFileSync(file, { encoding: "utf-8" }))
+                : parseJSON5(readFileSync(file, { encoding: "utf-8" })));
+            if (config?.plugins) {
+                for (const preset of config.plugins) {
+                    if (typeof preset === "string") {
+                        if (PRESET_NAMES.includes(preset))
+                            foundFromFile.push(preset);
+                    }
+                    else if (preset.package) {
+                        if (PRESET_NAMES.includes(preset.package))
+                            foundFromFile.push(preset.package);
                     }
                 }
             }

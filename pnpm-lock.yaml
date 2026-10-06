@@ -17,6 +17,9 @@ importers:
       '@opentui/solid':
         specifier: ^0.5.14
         version: 0.5.14(solid-js@1.9.12)(typescript@5.9.3)(web-tree-sitter@0.25.10)
+      confbox:
+        specifier: ^0.3.1
+        version: 0.3.1
     devDependencies:
       '@opencode/theme':
         specifier: ^2.0.18
@@ -904,6 +907,9 @@ packages:
   common-ancestor-path@2.0.0:
     resolution: {integrity: sha512-dnN3ibLeoRf2HNC+OlCiNc5d2zxbLJXOtiZUudNFSXZrNSydxcCsSpRzXwfu7BBWCIfHPw+xTayeBvJCP/D8Ng==}
     engines: {node: '>= 18'}
+
+  confbox@0.3.1:
+    resolution: {integrity: sha512-cKUSoKa8YxFZZSmraVi7onONx3amu77ngK3kGpsYHDH7drPwCRkQE1RYMPlLRrMtnciRj274XNRxcHxnKmDSnA==}
 
   content-type@2.1.0:
     resolution: {integrity: sha512-mj7UPXE0jaqaOsukNZRUEfEi2AcL7C/vwmwcHV0O97eO1E1pxBZuyjlZrx5seTaNBg1U6+o35wpa35Qfcc+7ag==}
@@ -2851,6 +2857,8 @@ snapshots:
   color-name@1.1.4: {}
 
   common-ancestor-path@2.0.0: {}
+
+  confbox@0.3.1: {}
 
   content-type@2.1.0: {}
 

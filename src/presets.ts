@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { homedir } from "node:os";
 import { logger } from "./logger";
 import { readFileSync } from "node:fs";
+import { parseJSON5, parseJSONC } from "confbox";
 
 const OMO_BUILTIN_AGENTS: AgentName[] = [
   "sisyphus",
@@ -54,11 +55,19 @@ export function detectPresets(plugins: PluginListOutput["data"]): PresetName[] {
   const foundFromFile: PresetName[] = [];
   for (const file of files) {
     try {
-      const config = JSON.parse(readFileSync(file, { encoding: "utf-8" }));
-      if (config?.presets) {
-        for (const preset of config.presets) {
-          if (PRESET_NAMES.includes(preset)) {
-            foundFromFile.push(preset);
+      const config = (
+        file.endsWith(".jsonc")
+          ? parseJSONC(readFileSync(file, { encoding: "utf-8" }))
+          : parseJSON5(readFileSync(file, { encoding: "utf-8" }))
+      ) as { plugins: (string | { package: string })[] };
+      if (config?.plugins) {
+        for (const preset of config.plugins) {
+          if (typeof preset === "string") {
+            if (PRESET_NAMES.includes(preset as PresetName))
+              foundFromFile.push(preset as PresetName);
+          } else if (preset.package) {
+            if (PRESET_NAMES.includes(preset.package as PresetName))
+              foundFromFile.push(preset.package as PresetName);
           }
         }
       }
