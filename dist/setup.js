@@ -9,7 +9,10 @@ const ROUTER_COMMAND = "router";
 export const setup = async (ctx) => {
     const plugins = await ctx.plugin.list();
     const catalog = await ctx.model.list();
-    const config = new Config(ctx.options, detectPresets(plugins.data));
+    const detected = detectPresets(plugins.data);
+    logger.log(`plugin registry: ${Array.isArray(plugins?.data) ? plugins.data.length : "non-array"} entries` +
+        ` -> presets ${JSON.stringify(detected)}`);
+    const config = new Config(ctx.options, detected);
     const modelStore = new ModelStore(ctx.storage, config);
     await modelStore.setCatalog(catalog.data);
     const router = new Router(modelStore, config, ctx.storage, (model) => probeModel(model, {
