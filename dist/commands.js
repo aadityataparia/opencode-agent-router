@@ -29,7 +29,7 @@ export function parseCommand(text) {
     if (verb === "refresh" || verb === "reload" || verb === "rescan") {
         return rest.length === 0
             ? { kind: "refresh" }
-            : { kind: "error", message: `\`refresh\` takes no arguments.` };
+            : { kind: "refresh", agents: rest };
     }
     if (verb === "strategy" || verb === "presets") {
         const valid = STRATEGY_NAMES.join(", ");
@@ -142,7 +142,7 @@ export function table(header, rows) {
 }
 export function formatStatus(config, store, router) {
     const lines = [];
-    lines.push(`**model-router** · ${config.current.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`, "");
+    lines.push(`**model-router** · ${config.current.strategy} · presets: ${config.current.presets.join(", ") || "none detected"}`, "");
     const routed = Array.from(router.cachedAssignments.keys());
     if (routed.length === 0) {
         lines.push("No agents are in scope. Set `presets` in the plugin options, or declare an `agents` entry.");
@@ -187,7 +187,7 @@ export function formatUsable(config, store, router, agent) {
             "`/router refresh` to re-probe, and check the status for an auth block.",
         ].join("\n");
     }
-    lines.push(`**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · probe ${config.current.probe ? "on" : "off"} · ${router.discovered} discovered`, "", `| model | health | score (for ${agent}) | latency |`, "| --- | --- | --- | --- |");
+    lines.push(`**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${router.discovered} discovered`, "", `| model | health | score (for ${agent}) | latency |`, "| --- | --- | --- | --- |");
     for (const model of pool) {
         const modelData = store.getModel(model.target);
         if (!modelData) {
@@ -226,19 +226,27 @@ export const HELP_TEXT = [
 export async function handleRouterCommand(prompt, context) {
     const { config, modelStore, router, say, session } = context;
     const command = parseCommand(prompt);
-    const status = formatStatus(config, modelStore, router);
+    const status = () => formatStatus(config, modelStore, router);
     switch (command.kind) {
         case "status":
-            void say(status);
+            void say(status());
             break;
         case "usable":
             void say(formatUsable(config, modelStore, router, (command.filter || session.agent)));
             break;
         case "refresh":
             void say("Refreshing the router...");
-            void router.assignModels().then(() => {
-                void say("Router refreshed." + "\n" + status);
-            });
+            if (command.agents) {
+                void router.assignModels(command.agents).then(() => {
+                    void say(`Router refreshed for agents \`${command.agents?.join(", ")}\`.\n` +
+                        status());
+                });
+            }
+            else {
+                void router.assignModels().then(() => {
+                    void say("Router refreshed." + "\n" + status());
+                });
+            }
             break;
         case "strategy":
             config.current.strategy = command.strategy;
@@ -246,7 +254,7 @@ export async function handleRouterCommand(prompt, context) {
             void router.assignModels().then(() => {
                 void say(`Routing strategy set to \`${command.strategy}\`. Re-routing complete.` +
                     "\n" +
-                    status);
+                    status());
             });
             break;
         case "pin":

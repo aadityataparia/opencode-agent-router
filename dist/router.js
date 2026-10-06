@@ -41,8 +41,9 @@ export class Router {
             }
         }
     }
-    async getAssignments() {
-        for (const agent of Object.keys(this.config.current.agents)) {
+    async getAssignments(agents) {
+        const agentsToProcess = agents || Object.keys(this.config.current.agents);
+        for (const agent of agentsToProcess) {
             // just probe if we already have model, to avoid changing models all the time
             if (this.cachedAssignments.has(agent) &&
                 ["cost", "adaptive"].includes(this.config.current.strategy)) {
@@ -65,8 +66,8 @@ export class Router {
     unpin(agent) {
         this.pins.delete(agent);
     }
-    async assignModels() {
-        const assignments = await this.getAssignments();
+    async assignModels(agents) {
+        const assignments = await this.getAssignments(agents);
         return await this.ctxAgent.transform((editor) => {
             let assigned = 0;
             const failed = [];

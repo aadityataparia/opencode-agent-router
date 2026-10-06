@@ -22,7 +22,7 @@ export const ROUTER_COMMAND = "router";
 export type ParsedCommand =
   | { kind: "status" }
   | { kind: "help" }
-  | { kind: "refresh" }
+  | { kind: "refresh"; agents?: string[] }
   | { kind: "strategy"; strategy: RoutingStrategy }
   | { kind: "usable"; filter?: string }
   | { kind: "pin"; agent: string; model: string }
@@ -59,7 +59,7 @@ export function parseCommand(text: string): ParsedCommand {
   if (verb === "refresh" || verb === "reload" || verb === "rescan") {
     return rest.length === 0
       ? { kind: "refresh" }
-      : { kind: "error", message: `\`refresh\` takes no arguments.` };
+      : { kind: "refresh", agents: rest };
   }
 
   if (verb === "strategy" || verb === "presets") {
@@ -215,7 +215,7 @@ export function formatStatus(
   const lines: string[] = [];
 
   lines.push(
-    `**model-router** · ${config.current.strategy} · probe ${config.current.probe ? "on" : "off"} · presets: ${config.current.presets.join(", ") || "none detected"}`,
+    `**model-router** · ${config.current.strategy} · presets: ${config.current.presets.join(", ") || "none detected"}`,
     "",
   );
 
@@ -284,7 +284,7 @@ export function formatUsable(
   }
 
   lines.push(
-    `**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · probe ${config.current.probe ? "on" : "off"} · ${router.discovered} discovered`,
+    `**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${router.discovered} discovered`,
     "",
     `| model | health | score (for ${agent}) | latency |`,
     "| --- | --- | --- | --- |",
@@ -344,11 +344,11 @@ export async function handleRouterCommand(
 ): Promise<void> {
   const { config, modelStore, router, say, session } = context;
   const command = parseCommand(prompt);
-  const status = formatStatus(config, modelStore, router);
+  const status = () => formatStatus(config, modelStore, router);
 
   switch (command.kind) {
     case "status":
-      void say(status);
+      void say(status());
       break;
     case "usable":
       void say(
@@ -362,9 +362,18 @@ export async function handleRouterCommand(
       break;
     case "refresh":
       void say("Refreshing the router...");
-      void router.assignModels().then(() => {
-        void say("Router refreshed." + "\n" + status);
-      });
+      if (command.agents) {
+        void router.assignModels(command.agents as AgentName[]).then(() => {
+          void say(
+            `Router refreshed for agents \`${command.agents?.join(", ")}\`.\n` +
+              status(),
+          );
+        });
+      } else {
+        void router.assignModels().then(() => {
+          void say("Router refreshed." + "\n" + status());
+        });
+      }
       break;
     case "strategy":
       config.current.strategy = command.strategy;
@@ -375,7 +384,7 @@ export async function handleRouterCommand(
         void say(
           `Routing strategy set to \`${command.strategy}\`. Re-routing complete.` +
             "\n" +
-            status,
+            status(),
         );
       });
       break;

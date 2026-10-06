@@ -64,12 +64,12 @@ export class Router {
     }
   }
 
-  private async getAssignments(): Promise<
-    Map<AgentName, CompactModel | undefined>
-  > {
-    for (const agent of Object.keys(
-      this.config.current.agents,
-    ) as AgentName[]) {
+  private async getAssignments(
+    agents?: AgentName[],
+  ): Promise<Map<AgentName, CompactModel | undefined>> {
+    const agentsToProcess =
+      agents || (Object.keys(this.config.current.agents) as AgentName[]);
+    for (const agent of agentsToProcess) {
       // just probe if we already have model, to avoid changing models all the time
       if (
         this.cachedAssignments.has(agent) &&
@@ -104,8 +104,8 @@ export class Router {
     this.pins.delete(agent);
   }
 
-  async assignModels(): Promise<{ dispose: () => void }> {
-    const assignments = await this.getAssignments();
+  async assignModels(agents?: AgentName[]): Promise<{ dispose: () => void }> {
+    const assignments = await this.getAssignments(agents);
     return await this.ctxAgent.transform((editor) => {
       let assigned = 0;
       const failed: string[] = [];

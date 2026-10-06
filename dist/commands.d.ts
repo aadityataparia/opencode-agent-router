@@ -15,6 +15,7 @@ export type ParsedCommand = {
     kind: "help";
 } | {
     kind: "refresh";
+    agents?: string[];
 } | {
     kind: "strategy";
     strategy: RoutingStrategy;

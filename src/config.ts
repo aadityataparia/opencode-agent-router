@@ -12,7 +12,6 @@ import {
 const DEFAULTS: Partial<RouterConfig> = {
   refreshMs: 60 * 60_000,
   maxFallbacks: 5,
-  probe: false,
   probeTimeoutMs: 8_000,
   strategy: "adaptive",
   minHealth: 0.7,
@@ -33,7 +32,6 @@ export class Config {
         1,
         Math.floor(this.positiveNumber("maxFallbacks")),
       ),
-      probe: this.boolean("probe", false),
       probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
       strategy: this.strategy(),
       minHealth: this.clampedNumber("minHealth", 0, 1),
