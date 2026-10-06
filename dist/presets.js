@@ -39,8 +39,8 @@ export function presetAgentNames(presets) {
     return [...names];
 }
 const files = [
-    resolve(homedir(), ".opencode", "opencode.jsonc"),
-    resolve(homedir(), ".opencode", "opencode.json"),
+    resolve(homedir(), ".config", "opencode", "opencode.jsonc"),
+    resolve(homedir(), ".config", "opencode", "opencode.json"),
     resolve(process.cwd(), "opencode.jsonc"),
     resolve(process.cwd(), "opencode.json"),
 ];
