@@ -3,6 +3,7 @@ import { AgentName, PRESET_NAMES, PresetName } from "./types";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 import { logger } from "./logger";
+import { readFileSync } from "node:fs";
 
 const OMO_BUILTIN_AGENTS: AgentName[] = [
   "sisyphus",
@@ -53,7 +54,7 @@ export function detectPresets(plugins: PluginListOutput["data"]): PresetName[] {
   const foundFromFile: PresetName[] = [];
   for (const file of files) {
     try {
-      const config = require(file);
+      const config = JSON.parse(readFileSync(file, { encoding: "utf-8" }));
       if (config?.presets) {
         for (const preset of config.presets) {
           if (PRESET_NAMES.includes(preset)) {

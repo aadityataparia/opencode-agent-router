@@ -2,6 +2,7 @@ import { PRESET_NAMES } from "./types";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
 import { logger } from "./logger";
+import { readFileSync } from "node:fs";
 const OMO_BUILTIN_AGENTS = [
     "sisyphus",
     "hephaestus",
@@ -48,7 +49,7 @@ export function detectPresets(plugins) {
     const foundFromFile = [];
     for (const file of files) {
         try {
-            const config = require(file);
+            const config = JSON.parse(readFileSync(file, { encoding: "utf-8" }));
             if (config?.presets) {
                 for (const preset of config.presets) {
                     if (PRESET_NAMES.includes(preset)) {
