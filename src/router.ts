@@ -171,9 +171,10 @@ export class Router {
           continue;
         }
       }
+      const model = this.modelStore.getModel(candidate.target);
       if (
-        (this.modelStore.getModel(candidate.target)?.health ?? 1) >=
-        this.config.current.minHealth
+        (model?.health ?? 1) >= this.config.current.minHealth &&
+        model?.lastProbeResult
       ) {
         return candidate;
       }

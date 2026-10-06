@@ -130,8 +130,9 @@ export class Router {
                     continue;
                 }
             }
-            if ((this.modelStore.getModel(candidate.target)?.health ?? 1) >=
-                this.config.current.minHealth) {
+            const model = this.modelStore.getModel(candidate.target);
+            if ((model?.health ?? 1) >= this.config.current.minHealth &&
+                model?.lastProbeResult) {
                 return candidate;
             }
         }
