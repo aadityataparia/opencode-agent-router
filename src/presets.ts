@@ -2,6 +2,7 @@ import { PluginListOutput } from "@opencode/client";
 import { AgentName, PRESET_NAMES, PresetName } from "./types";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { logger } from "./logger";
 
 const OMO_BUILTIN_AGENTS: AgentName[] = [
   "sisyphus",
@@ -60,8 +61,8 @@ export function detectPresets(plugins: PluginListOutput["data"]): PresetName[] {
           }
         }
       }
-    } catch {
-      // ignore
+    } catch (e) {
+      logger.error("Error in reading from file", file, e);
     }
   }
 

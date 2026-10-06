@@ -1,6 +1,7 @@
 import { PRESET_NAMES } from "./types";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { logger } from "./logger";
 const OMO_BUILTIN_AGENTS = [
     "sisyphus",
     "hephaestus",
@@ -56,8 +57,8 @@ export function detectPresets(plugins) {
                 }
             }
         }
-        catch {
-            // ignore
+        catch (e) {
+            logger.error("Error in reading from file", file, e);
         }
     }
     if (foundFromFile.length > 0) {
