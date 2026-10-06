@@ -1,5 +1,7 @@
 import { PluginListOutput } from "@opencode/client";
 import { AgentName, PRESET_NAMES, PresetName } from "./types";
+import { resolve } from "node:path";
+import { homedir } from "node:os";
 
 const OMO_BUILTIN_AGENTS: AgentName[] = [
   "sisyphus",
@@ -39,7 +41,34 @@ export function presetAgentNames(presets: readonly PresetName[]): AgentName[] {
   return [...names];
 }
 
+const files = [
+  resolve(homedir(), ".opencode", "opencode.jsonc"),
+  resolve(homedir(), ".opencode", "opencode.json"),
+  resolve(process.cwd(), "opencode.jsonc"),
+  resolve(process.cwd(), "opencode.json"),
+];
+
 export function detectPresets(plugins: PluginListOutput["data"]): PresetName[] {
+  const foundFromFile: PresetName[] = [];
+  for (const file of files) {
+    try {
+      const config = require(file);
+      if (config?.presets) {
+        for (const preset of config.presets) {
+          if (PRESET_NAMES.includes(preset)) {
+            foundFromFile.push(preset);
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  if (foundFromFile.length > 0) {
+    return foundFromFile;
+  }
+
   const found = PRESET_NAMES.filter((preset) =>
     plugins.some(
       (entry) => entry.id === preset || entry.id?.startsWith(`${preset}@`),
