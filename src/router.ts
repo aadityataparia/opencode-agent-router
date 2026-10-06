@@ -19,10 +19,8 @@ const PIN_KEY = "model-router:pins";
 const ASSIGNMENT_KEY = "model-router:assignments";
 
 export class Router {
-  readonly candidates = new Map<AgentName, Candidate[]>();
   readonly pins = new Map<AgentName, string>();
   readonly cachedAssignments = new Map<AgentName, CompactModel | undefined>();
-  readonly discovered: number;
 
   constructor(
     private readonly modelStore: ModelStore,
@@ -30,19 +28,7 @@ export class Router {
     private readonly storage: StorageDomain,
     readonly probe: (model: CompactModel) => Promise<ProbeResult>,
     private readonly ctxAgent: Context["agent"],
-  ) {
-    const allModels = modelStore.getAllModels();
-    this.discovered = allModels.length;
-    for (const agent of Object.keys(config.current.agents) as AgentName[]) {
-      this.candidates.set(
-        agent,
-        this.sort(
-          findCandidates(this.config.current.agents[agent]!, allModels),
-          this.config.current.strategy,
-        ),
-      );
-    }
-  }
+  ) {}
 
   async init() {
     const storedPins = (await this.storage.get(PIN_KEY)) as
@@ -86,7 +72,7 @@ export class Router {
       const result = await this.choose(agent);
       this.cachedAssignments.set(
         agent,
-        result ?? this.candidates.get(agent)?.[0],
+        result ?? this.getCandidates(agent)?.[0],
       );
     }
 
@@ -148,7 +134,7 @@ export class Router {
     if (!this.config.current.agents[agent]) return undefined;
 
     const candidates = this.sort(
-      this.candidates.get(agent) || [],
+      this.getCandidates(agent) || [],
       this.config.current.strategy,
     );
     if (candidates.length === 0) return undefined;
@@ -167,7 +153,7 @@ export class Router {
   private async probeAndSelect(
     agent: AgentName,
   ): Promise<Candidate | undefined> {
-    const candidates = this.candidates.get(agent);
+    const candidates = this.getCandidates(agent);
     if (!candidates || candidates.length === 0) return undefined;
 
     for (const candidate of candidates) {
@@ -215,5 +201,15 @@ export class Router {
     return Number.isFinite(model.latencyMs)
       ? model.latencyMs
       : Number.MAX_SAFE_INTEGER;
+  }
+
+  getCandidates(agent: AgentName): Candidate[] {
+    return this.sort(
+      findCandidates(
+        this.config.current.agents[agent]!,
+        this.modelStore.getAllModels(),
+      ),
+      this.config.current.strategy,
+    );
   }
 }

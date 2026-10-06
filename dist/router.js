@@ -11,21 +11,14 @@ export class Router {
     storage;
     probe;
     ctxAgent;
-    candidates = new Map();
     pins = new Map();
     cachedAssignments = new Map();
-    discovered;
     constructor(modelStore, config, storage, probe, ctxAgent) {
         this.modelStore = modelStore;
         this.config = config;
         this.storage = storage;
         this.probe = probe;
         this.ctxAgent = ctxAgent;
-        const allModels = modelStore.getAllModels();
-        this.discovered = allModels.length;
-        for (const agent of Object.keys(config.current.agents)) {
-            this.candidates.set(agent, this.sort(findCandidates(this.config.current.agents[agent], allModels), this.config.current.strategy));
-        }
     }
     async init() {
         const storedPins = (await this.storage.get(PIN_KEY));
@@ -53,7 +46,7 @@ export class Router {
                 }
             }
             const result = await this.choose(agent);
-            this.cachedAssignments.set(agent, result ?? this.candidates.get(agent)?.[0]);
+            this.cachedAssignments.set(agent, result ?? this.getCandidates(agent)?.[0]);
         }
         return this.cachedAssignments;
     }
@@ -102,7 +95,7 @@ export class Router {
     async choose(agent) {
         if (!this.config.current.agents[agent])
             return undefined;
-        const candidates = this.sort(this.candidates.get(agent) || [], this.config.current.strategy);
+        const candidates = this.sort(this.getCandidates(agent) || [], this.config.current.strategy);
         if (candidates.length === 0)
             return undefined;
         if (this.pins.has(agent)) {
@@ -115,7 +108,7 @@ export class Router {
         return this.probeAndSelect(agent);
     }
     async probeAndSelect(agent) {
-        const candidates = this.candidates.get(agent);
+        const candidates = this.getCandidates(agent);
         if (!candidates || candidates.length === 0)
             return undefined;
         for (const candidate of candidates) {
@@ -152,5 +145,8 @@ export class Router {
         return Number.isFinite(model.latencyMs)
             ? model.latencyMs
             : Number.MAX_SAFE_INTEGER;
+    }
+    getCandidates(agent) {
+        return this.sort(findCandidates(this.config.current.agents[agent], this.modelStore.getAllModels()), this.config.current.strategy);
     }
 }

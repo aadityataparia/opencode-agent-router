@@ -178,7 +178,7 @@ export function formatUsable(config, store, router, agent) {
         return `No agent specified. Run \`/router usable <agent>\` to see the pool for one agent.`;
     }
     const lines = [];
-    const pool = router.candidates.get(agent) || [];
+    const pool = router.getCandidates(agent) || [];
     if (pool.length === 0) {
         return [
             "No models are routable right now.",
@@ -187,7 +187,7 @@ export function formatUsable(config, store, router, agent) {
             "`/router refresh` to re-probe, and check the status for an auth block.",
         ].join("\n");
     }
-    lines.push(`**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${router.discovered} discovered`, "", `| model | health | score (for ${agent}) | latency |`, "| --- | --- | --- | --- |");
+    lines.push(`**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${store.getAllModels().length} discovered`, "", `| model | health | score (for ${agent}) | latency |`, "| --- | --- | --- | --- |");
     for (const model of pool) {
         const modelData = store.getModel(model.target);
         if (!modelData) {

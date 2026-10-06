@@ -9,10 +9,8 @@ export declare class Router {
     private readonly storage;
     readonly probe: (model: CompactModel) => Promise<ProbeResult>;
     private readonly ctxAgent;
-    readonly candidates: Map<AgentName, Candidate[]>;
     readonly pins: Map<AgentName, string>;
     readonly cachedAssignments: Map<AgentName, CompactModel | undefined>;
-    readonly discovered: number;
     constructor(modelStore: ModelStore, config: Config, storage: StorageDomain, probe: (model: CompactModel) => Promise<ProbeResult>, ctxAgent: Context["agent"]);
     init(): Promise<void>;
     private getAssignments;
@@ -25,4 +23,5 @@ export declare class Router {
     private probeAndSelect;
     private sort;
     private normalizedLatency;
+    getCandidates(agent: AgentName): Candidate[];
 }

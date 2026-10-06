@@ -272,7 +272,7 @@ export function formatUsable(
   }
 
   const lines: string[] = [];
-  const pool = router.candidates.get(agent) || [];
+  const pool = router.getCandidates(agent) || [];
 
   if (pool.length === 0) {
     return [
@@ -284,7 +284,7 @@ export function formatUsable(
   }
 
   lines.push(
-    `**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${router.discovered} discovered`,
+    `**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${store.getAllModels().length} discovered`,
     "",
     `| model | health | score (for ${agent}) | latency |`,
     "| --- | --- | --- | --- |",
