@@ -25,7 +25,8 @@ interface SelectedModel {
 
 interface Route {
   readonly agent: string;
-  readonly target: string;
+  /** Undefined while the agent exists but the router has not assigned a model yet. */
+  readonly target?: string;
 }
 
 type TuiContext = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0];
@@ -95,7 +96,11 @@ export const OpenCodeAgentRouterTui = Plugin.define({
           ...visible.map((route) =>
             routeRow(theme, route, {
               current: route.agent === current?.agent,
-              currentModel: route.target === selected?.target,
+              // An unassigned route has no target, so it must never compare equal
+              // to the selection and claim to be the model in use.
+              currentModel:
+                route.target !== undefined &&
+                route.target === selected?.target,
               variant:
                 route.agent === current?.agent ? selected?.variant : undefined,
             }),
@@ -266,9 +271,11 @@ function routeRow(
         },
         [
           "  ↳ " +
-            (options.variant
-              ? `${route.target} (${options.variant})`
-              : route.target),
+            (route.target === undefined
+              ? "assigning model…"
+              : options.variant
+                ? `${route.target} (${options.variant})`
+                : route.target),
         ],
       ),
     ],
@@ -366,7 +373,7 @@ function stateSignature(ctx: TuiContext, routes: readonly Route[]): string {
   const location = ctx.location ?? ctx.data.location.default();
   const selected = readSelection(ctx, location);
   const assigned = routes
-    .map((route) => `${route.agent}=${route.target}`)
+    .map((route) => `${route.agent}=${route.target ?? ""}`)
     .join(",");
   const selection = [
     selected?.providerID ?? "",

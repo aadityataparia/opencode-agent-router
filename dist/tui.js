@@ -57,7 +57,10 @@ export const OpenCodeAgentRouterTui = Plugin.define({
                 }),
                 ...visible.map((route) => routeRow(theme, route, {
                     current: route.agent === current?.agent,
-                    currentModel: route.target === selected?.target,
+                    // An unassigned route has no target, so it must never compare equal
+                    // to the selection and claim to be the model in use.
+                    currentModel: route.target !== undefined &&
+                        route.target === selected?.target,
                     variant: route.agent === current?.agent ? selected?.variant : undefined,
                 })),
                 ...emptyState(theme, routes, current, expanded),
@@ -173,9 +176,11 @@ function routeRow(theme, route, options) {
             textAlign: "right",
         }, [
             "  ↳ " +
-                (options.variant
-                    ? `${route.target} (${options.variant})`
-                    : route.target),
+                (route.target === undefined
+                    ? "assigning model…"
+                    : options.variant
+                        ? `${route.target} (${options.variant})`
+                        : route.target),
         ]),
     ]);
 }
@@ -255,7 +260,7 @@ function stateSignature(ctx, routes) {
     const location = ctx.location ?? ctx.data.location.default();
     const selected = readSelection(ctx, location);
     const assigned = routes
-        .map((route) => `${route.agent}=${route.target}`)
+        .map((route) => `${route.agent}=${route.target ?? ""}`)
         .join(",");
     const selection = [
         selected?.providerID ?? "",
