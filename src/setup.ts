@@ -10,6 +10,8 @@ import { handleRouterCommand } from "./commands";
 const ROUTER_COMMAND = "router";
 
 export const setup: Plugin["setup"] = async (ctx) => {
+  await ctx.agent.reload();
+
   const plugins = await ctx.plugin.list();
   const catalog = await ctx.model.list();
 
