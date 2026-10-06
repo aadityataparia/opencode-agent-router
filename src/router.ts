@@ -14,6 +14,7 @@ import { Agent, Model, Provider } from "@opencode/plugin";
 import { Context } from "@opencode/plugin/promise/plugin";
 import { logger } from "./logger";
 import { syncRoutedAgents } from "./agent-files";
+import { JsonValue } from "@opencode/client";
 
 const PIN_KEY = "model-router:pins";
 const ASSIGNMENT_KEY = "model-router:assignments";
@@ -61,6 +62,10 @@ export class Router {
       const result = await this.choose(agent);
       this.cachedAssignments.set(agent, result);
     }
+    void this.storage.set(
+      ASSIGNMENT_KEY,
+      Object.fromEntries(this.cachedAssignments.entries()) as JsonValue,
+    );
 
     return this.cachedAssignments;
   }
@@ -70,6 +75,7 @@ export class Router {
       throw new Error(`Cannot pin unknown model: ${modelTarget}`);
     }
     this.pins.set(agent, modelTarget);
+    void this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
   }
 
   unpin(agent: AgentName): void {

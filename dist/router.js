@@ -41,6 +41,7 @@ export class Router {
             const result = await this.choose(agent);
             this.cachedAssignments.set(agent, result);
         }
+        void this.storage.set(ASSIGNMENT_KEY, Object.fromEntries(this.cachedAssignments.entries()));
         return this.cachedAssignments;
     }
     pin(agent, modelTarget) {
@@ -48,6 +49,7 @@ export class Router {
             throw new Error(`Cannot pin unknown model: ${modelTarget}`);
         }
         this.pins.set(agent, modelTarget);
+        void this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
     }
     unpin(agent) {
         this.pins.delete(agent);
