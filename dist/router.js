@@ -13,6 +13,7 @@ export class Router {
     ctxAgent;
     pins = new Map();
     cachedAssignments = new Map();
+    transformDisposer;
     constructor(modelStore, config, storage, probe, ctxAgent) {
         this.modelStore = modelStore;
         this.config = config;
@@ -63,7 +64,9 @@ export class Router {
     }
     async assignModels(agents) {
         const assignments = await this.getAssignments(agents);
-        return await this.ctxAgent.transform((editor) => {
+        this.transformDisposer?.();
+        this.transformDisposer = undefined;
+        const registration = await this.ctxAgent.transform((editor) => {
             let assigned = 0;
             const failed = [];
             for (const [agentName, ref] of assignments) {
@@ -93,6 +96,20 @@ export class Router {
             logger.log(`agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
                 (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""));
         });
+        let disposed = false;
+        const dispose = () => {
+            if (disposed)
+                return;
+            disposed = true;
+            // Only tear down our own registration: a later `assignModels` may already
+            // have replaced this one, and disposing that would drop live routing.
+            if (this.transformDisposer === dispose) {
+                this.transformDisposer = undefined;
+            }
+            registration.dispose();
+        };
+        this.transformDisposer = dispose;
+        return { dispose };
     }
     async choose(agent) {
         if (!this.config.current.agents[agent])

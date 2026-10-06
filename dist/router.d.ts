@@ -11,6 +11,7 @@ export declare class Router {
     private readonly ctxAgent;
     readonly pins: Map<AgentName, string>;
     readonly cachedAssignments: Map<AgentName, CompactModel | undefined>;
+    private transformDisposer;
     constructor(modelStore: ModelStore, config: Config, storage: StorageDomain, probe: (model: CompactModel) => Promise<ProbeResult>, ctxAgent: Context["agent"]);
     init(): Promise<void>;
     private getAssignments;

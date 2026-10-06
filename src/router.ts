@@ -22,6 +22,8 @@ export class Router {
   readonly pins = new Map<AgentName, string>();
   readonly cachedAssignments = new Map<AgentName, CompactModel | undefined>();
 
+  private transformDisposer: (() => void) | undefined;
+
   constructor(
     private readonly modelStore: ModelStore,
     private readonly config: Config,
@@ -94,7 +96,9 @@ export class Router {
 
   async assignModels(agents?: AgentName[]): Promise<{ dispose: () => void }> {
     const assignments = await this.getAssignments(agents);
-    return await this.ctxAgent.transform((editor) => {
+    this.transformDisposer?.();
+    this.transformDisposer = undefined;
+    const registration = await this.ctxAgent.transform((editor) => {
       let assigned = 0;
       const failed: string[] = [];
 
@@ -130,6 +134,20 @@ export class Router {
           (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""),
       );
     });
+
+    let disposed = false;
+    const dispose = (): void => {
+      if (disposed) return;
+      disposed = true;
+      // Only tear down our own registration: a later `assignModels` may already
+      // have replaced this one, and disposing that would drop live routing.
+      if (this.transformDisposer === dispose) {
+        this.transformDisposer = undefined;
+      }
+      registration.dispose();
+    };
+    this.transformDisposer = dispose;
+    return { dispose };
   }
 
   private async choose(agent: AgentName): Promise<CompactModel | undefined> {
