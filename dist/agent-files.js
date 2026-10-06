@@ -109,31 +109,33 @@ export function syncRoutedAgents(names, models = new Map(), onWarn = () => { }) 
             onWarn(`could not write ${file}: ${describeError(error)}`);
         }
     }
-    for (const entry of agentFiles(dir)) {
-        const name = entry.slice(0, -".md".length);
-        if (routed.has(name))
-            continue;
-        const file = join(dir, entry);
-        let current;
-        try {
-            current = readFileSync(file, "utf8");
-        }
-        catch (error) {
-            onWarn(`could not read ${file}: ${describeError(error)}`);
-            continue;
-        }
-        // Only ever delete a file still byte-for-byte what we would have written.
-        if (!isOurs(name, current)) {
-            kept.push(`${ROUTER_AGENT_PREFIX}${name}`);
-            onWarn(`keeping ${file}: it is not the router's own, so removing it is left to you`);
-            continue;
-        }
-        try {
-            rmSync(file);
-            removed.push(`${ROUTER_AGENT_PREFIX}${name}`);
-        }
-        catch (error) {
-            onWarn(`could not remove ${file}: ${describeError(error)}`);
+    if (routed.size !== 0) {
+        for (const entry of agentFiles(dir)) {
+            const name = entry.slice(0, -".md".length);
+            if (routed.has(name))
+                continue;
+            const file = join(dir, entry);
+            let current;
+            try {
+                current = readFileSync(file, "utf8");
+            }
+            catch (error) {
+                onWarn(`could not read ${file}: ${describeError(error)}`);
+                continue;
+            }
+            // Only ever delete a file still byte-for-byte what we would have written.
+            if (!isOurs(name, current)) {
+                kept.push(`${ROUTER_AGENT_PREFIX}${name}`);
+                onWarn(`keeping ${file}: it is not the router's own, so removing it is left to you`);
+                continue;
+            }
+            try {
+                rmSync(file);
+                removed.push(`${ROUTER_AGENT_PREFIX}${name}`);
+            }
+            catch (error) {
+                onWarn(`could not remove ${file}: ${describeError(error)}`);
+            }
         }
     }
     return { created, updated, removed, kept };

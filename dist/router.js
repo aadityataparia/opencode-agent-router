@@ -2,6 +2,7 @@ import { routerAgentID, } from "./types";
 import { findCandidates } from "./scorer";
 import { Agent, Model, Provider } from "@opencode/plugin";
 import { logger } from "./logger";
+import { syncRoutedAgents } from "./agent-files";
 const PIN_KEY = "model-router:pins";
 const ASSIGNMENT_KEY = "model-router:assignments";
 export class Router {
@@ -89,13 +90,9 @@ export class Router {
                     }
                 }
             }
-            // syncRoutedAgents(
-            //   Array.from(assignments.keys()),
-            //   assignments,
-            //   (message) => {
-            //     logger.warn(`syncRoutedAgents: ${message}`);
-            //   },
-            // );
+            syncRoutedAgents(Array.from(assignments.keys()), assignments, (message) => {
+                logger.warn(`syncRoutedAgents: ${message}`);
+            });
             logger.log(`agent transform: ${assigned} applied, for ${assignments.size} role(s)` +
                 (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""));
         });
