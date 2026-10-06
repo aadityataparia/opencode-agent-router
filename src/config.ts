@@ -20,10 +20,14 @@ const DEFAULTS: Partial<RouterConfig> = {
 };
 
 export class Config {
+  detectedPresets: PresetName[];
+
   constructor(
     private readonly raw: Partial<RouterConfig>,
-    private readonly detectedPresets: PresetName[] = [],
-  ) {}
+    detectedPresets: PresetName[] = [],
+  ) {
+    this.detectedPresets = detectedPresets;
+  }
 
   get current(): RouterConfig {
     const config: RouterConfig = {

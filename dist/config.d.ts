@@ -1,7 +1,7 @@
 import { PresetName, RouterConfig } from "./types";
 export declare class Config {
     private readonly raw;
-    private readonly detectedPresets;
+    detectedPresets: PresetName[];
     constructor(raw: Partial<RouterConfig>, detectedPresets?: PresetName[]);
     get current(): RouterConfig;
     private array;

@@ -48,6 +48,7 @@ export const setup: Plugin["setup"] = async (ctx) => {
         const curSession = await ctx.session.get({
           sessionID: input.sessionID,
         });
+        config.detectedPresets = detectPresets((await ctx.plugin.list()).data);
         return handleRouterCommand(input.prompt.text, {
           config,
           modelStore,
