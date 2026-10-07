@@ -1,5 +1,3 @@
-/** @jsxImportSource @opentui/solid */
-
 import { readFileSync } from "node:fs";
 import { createElement, insert, JSX, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
@@ -7,7 +5,7 @@ import { logger } from "./logger";
 
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
-const REFRESH_MS = 1_000;
+const REFRESH_MS = 5_000;
 
 interface TraceEntry {
   readonly at: string;
@@ -71,14 +69,12 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         ? routes.find((route) => route.agent === selected.agent)
         : undefined;
 
-      const visible = expanded
+      const visible: Route[] = expanded
         ? [
             ...(current ? [current] : []),
             ...routes.filter((route) => route.agent !== current?.agent),
           ]
-        : current
-          ? [current]
-          : [];
+        : [current].filter((x): x is Route => !!x);
 
       logger.trace(
         `render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`,
@@ -111,16 +107,11 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       ) as unknown as Element;
     };
 
-    const claim = (): void => {
-      disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
-    };
-
     // The host exposes no reactive hook for the sidebar's inputs, and a tree
     // this size is cheap to rebuild, so re-claim the slot when state changes.
     const rebuild = (): void => {
       if (disposed) return;
       disposeSlot?.();
-      claim();
       ctx.renderer.requestRender();
     };
 
@@ -158,10 +149,8 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       });
     }, REFRESH_MS);
 
-    void refreshRoutes().then(() => {
-      claim();
-      signature = stateSignature(ctx, routes);
-    });
+    disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
+    onChange("init");
 
     return () => {
       disposed = true;
@@ -177,34 +166,49 @@ export default OpenCodeAgentRouterTui;
 
 /* ---------------------------------------------------------------- rendering */
 
-type PropType =
+type PropType = string | number | Theme["text"]["base"] | boolean;
+
+type Child =
+  | JSX.Element
   | string
   | number
-  | Theme["text"]["base"]
-  | boolean
-  | (() => void);
+  | null
+  | undefined
+  | false
+  | (() => string);
 
 function element(
-  Tag: "box" | "text",
-  props: Record<string, PropType> = {},
-  children: any[] = [],
-): BaseRenderable {
-  return <Tag {...props}>{children}</Tag>;
+  tag: string,
+  props: Record<string, unknown>,
+  children: Child[] = [],
+) {
+  const node = createElement(tag);
+
+  for (const [key, value] of Object.entries(props)) {
+    if (value !== undefined) setProp(node, key, value);
+  }
+
+  for (const child of children) {
+    if (child === null || child === undefined || child === false) continue;
+    insert(node, child);
+  }
+
+  return node as unknown as JSX.Element;
 }
 
 const box = (
   props: Record<string, PropType>,
-  children: unknown[] = [],
+  children: Child[] = [],
 ): BaseRenderable => element("box", props, children);
 
 const text = (
   props: Record<string, PropType>,
-  children: unknown[],
+  children: Child[],
 ): BaseRenderable => element("text", props, children);
 
 const column = (
   props: Record<string, PropType>,
-  children: unknown[],
+  children: Child[],
 ): BaseRenderable => box({ flexDirection: "column", ...props }, children);
 
 /** `Model Router` badge on the left, plugin version muted on the right. */
@@ -221,7 +225,6 @@ function header(
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      onClick: onToggle,
     },
     [
       box({ paddingRight: 1, backgroundColor: theme.background.raised.base }, [
@@ -232,6 +235,8 @@ function header(
       text({ fg: theme.text.muted, wrapMode: "none" }, [`v${version}`]),
     ],
   );
+
+  setProp(row as never, "onMouseUp", onToggle);
 
   return row;
 }
@@ -329,32 +334,36 @@ function readSelection(
   ctx: TuiContext,
   location: TuiLocation,
 ): SelectedModel | undefined {
-  const route = ctx.ui.router.current();
-  if (route.type === "session") {
-    const agent = ctx.data.session
-      .get(route.sessionID)
-      ?.agent?.replace(ROUTER_AGENT_PREFIX, "");
-    const model = ctx.data.session.get(route.sessionID)?.model;
-    return model
-      ? {
-          providerID: model.providerID,
-          id: model.id,
-          variant: model.variant,
-          target: `${model.providerID}/${model.id}`,
-          agent,
-        }
-      : undefined;
-  }
+  try {
+    const route = ctx.ui.router.current();
+    if (route.type === "session") {
+      const agent = ctx.data.session
+        .get(route.sessionID)
+        ?.agent?.replace(ROUTER_AGENT_PREFIX, "");
+      const model = ctx.data.session.get(route.sessionID)?.model;
+      return model
+        ? {
+            providerID: model.providerID,
+            id: model.id,
+            variant: model.variant,
+            target: `${model.providerID}/${model.id}`,
+            agent,
+          }
+        : undefined;
+    }
 
-  const agents = ctx.data.location.agent.list(location) ?? [];
-  const primary = agents.find((agent) => agent.mode === "primary");
-  if (!primary?.model) return undefined;
-  return {
-    providerID: primary.model.providerID,
-    target: `${primary.model.providerID}/${primary.model.id}`,
-    id: primary.model.id,
-    agent: primary.id,
-  };
+    const agents = ctx.data.location.agent.list(location) ?? [];
+    const primary = agents.find((agent) => agent.mode === "primary");
+    if (!primary?.model) return undefined;
+    return {
+      providerID: primary.model.providerID,
+      target: `${primary.model.providerID}/${primary.model.id}`,
+      id: primary.model.id,
+      agent: primary.id,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Change detector for the poll loop, from the same reads `build` performs. */
