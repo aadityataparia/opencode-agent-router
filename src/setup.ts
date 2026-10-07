@@ -7,7 +7,7 @@ import { probeModel } from "./probe";
 import { logger } from "./logger";
 import { handleRouterCommand } from "./commands";
 import { SessionInfo } from "@opencode/client";
-import { AgentName } from "./types";
+import { AgentName, ROUTER_AGENT_PREFIX } from "./types";
 
 const ROUTER_COMMAND = "router";
 
@@ -19,7 +19,9 @@ const reassign = async (
 ) => {
   return router.assignModels(agents).then(() => {
     if (!session.agent) return;
-    const newModel = router.cachedAssignments.get(session.agent as AgentName);
+    const newModel = router.cachedAssignments.get(
+      session.agent.replace(ROUTER_AGENT_PREFIX, "") as AgentName,
+    );
     if (
       newModel &&
       (newModel?.id !== session.model?.id ||
@@ -134,7 +136,7 @@ ${text}
           ctx,
           router,
           await ctx.session.get({ sessionID: req.sessionID }),
-          [curSession.agent as AgentName],
+          [curSession.agent.replace(ROUTER_AGENT_PREFIX, "") as AgentName],
         );
       }
     }
@@ -147,6 +149,13 @@ ${text}
       verdict: "ok",
       latencyMs: 100,
     });
+  });
+
+  await ctx.session.hook("model.request", async (input) => {
+    if (input.model.providerID === "model-router") {
+      const curSession = await ctx.session.get({ sessionID: input.sessionID });
+      void reassign(ctx, router, curSession, [input.agent as AgentName]);
+    }
   });
 
   return async () => {

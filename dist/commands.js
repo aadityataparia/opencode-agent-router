@@ -1,4 +1,4 @@
-import { STRATEGY_NAMES } from "./types";
+import { ROUTER_AGENT_PREFIX, STRATEGY_NAMES } from "./types";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -232,7 +232,11 @@ export async function handleRouterCommand(prompt, context) {
             void say(status());
             break;
         case "usable":
-            void say(formatUsable(config, modelStore, router, (command.filter || session.agent)));
+            if (!session.agent) {
+                void say("Agent is not supported");
+            }
+            void say(formatUsable(config, modelStore, router, (command.filter ||
+                session.agent?.replace(ROUTER_AGENT_PREFIX, ""))));
             break;
         case "refresh":
             void say("Refreshing the router...");

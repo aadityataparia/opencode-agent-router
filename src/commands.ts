@@ -2,7 +2,7 @@ import { SessionInfo } from "@opencode/client";
 import { Config } from "./config";
 import { ModelStore } from "./model-store";
 import { Router } from "./router";
-import { STRATEGY_NAMES } from "./types";
+import { ROUTER_AGENT_PREFIX, STRATEGY_NAMES } from "./types";
 import type {
   AgentName,
   Candidate,
@@ -353,12 +353,16 @@ export async function handleRouterCommand(
       void say(status());
       break;
     case "usable":
+      if (!session.agent) {
+        void say("Agent is not supported");
+      }
       void say(
         formatUsable(
           config,
           modelStore,
           router,
-          (command.filter || session.agent) as AgentName,
+          (command.filter ||
+            session.agent?.replace(ROUTER_AGENT_PREFIX, "")) as AgentName,
         ),
       );
       break;

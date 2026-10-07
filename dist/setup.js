@@ -5,12 +5,13 @@ import { Router } from "./router";
 import { probeModel } from "./probe";
 import { logger } from "./logger";
 import { handleRouterCommand } from "./commands";
+import { ROUTER_AGENT_PREFIX } from "./types";
 const ROUTER_COMMAND = "router";
 const reassign = async (ctx, router, session, agents) => {
     return router.assignModels(agents).then(() => {
         if (!session.agent)
             return;
-        const newModel = router.cachedAssignments.get(session.agent);
+        const newModel = router.cachedAssignments.get(session.agent.replace(ROUTER_AGENT_PREFIX, ""));
         if (newModel &&
             (newModel?.id !== session.model?.id ||
                 newModel?.providerID !== session.model?.providerID)) {
@@ -93,7 +94,7 @@ ${text}
         if (!req.response.ok) {
             const curSession = await ctx.session.get({ sessionID: req.sessionID });
             if (curSession.agent) {
-                void reassign(ctx, router, await ctx.session.get({ sessionID: req.sessionID }), [curSession.agent]);
+                void reassign(ctx, router, await ctx.session.get({ sessionID: req.sessionID }), [curSession.agent.replace(ROUTER_AGENT_PREFIX, "")]);
             }
         }
     });
@@ -103,6 +104,12 @@ ${text}
             verdict: "ok",
             latencyMs: 100,
         });
+    });
+    await ctx.session.hook("model.request", async (input) => {
+        if (input.model.providerID === "model-router") {
+            const curSession = await ctx.session.get({ sessionID: input.sessionID });
+            void reassign(ctx, router, curSession, [input.agent]);
+        }
     });
     return async () => {
         await commandDisposer.dispose();
