@@ -22,6 +22,7 @@ export declare class Router {
     }>;
     private choose;
     private probeAndSelect;
+    probeModel(model: CompactModel): Promise<ProbeResult>;
     private sort;
     private normalizedLatency;
     getCandidates(agent: AgentName): Candidate[];

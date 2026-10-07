@@ -162,10 +162,7 @@ export class Router {
 
     const current = this.cachedAssignments.get(agent);
     if (current) {
-      const result = await this.probe(current);
-      this.modelStore.recordProbe(current.target, result);
-      const model = this.modelStore.getModel(current.target);
-      if (model?.lastProbeResult) {
+      if ((await this.probeModel(current)).verdict === "ok") {
         return candidates.find((c) => c.target === current.target);
       }
     }
@@ -173,17 +170,27 @@ export class Router {
     for (const candidate of candidates) {
       if (candidate.target === current?.target) continue;
 
-      if (this.modelStore.needsProbe(candidate.target)) {
-        const result = await this.probe(candidate);
-        this.modelStore.recordProbe(candidate.target, result); // 1 minute cooldown for probe results
-      }
-      const model = this.modelStore.getModel(candidate.target);
-      if (model?.lastProbeResult) {
+      if ((await this.probeModel(candidate)).verdict === "ok") {
         return candidate;
       }
     }
 
     return undefined;
+  }
+
+  async probeModel(model: CompactModel): Promise<ProbeResult> {
+    if (this.modelStore.needsProbe(model.target)) {
+      const result = await this.probe(model);
+      this.modelStore.recordProbe(model.target, result); // 1 minute cooldown for probe results
+
+      return result;
+    }
+
+    const data = this.modelStore.getModel(model.target);
+    return {
+      verdict: data?.lastProbeResult ? "ok" : "unusable",
+      latencyMs: data?.latencyMs ?? 10_000,
+    };
   }
 
   private sort(

@@ -446,8 +446,7 @@ export async function handleRouterCommand(
         return;
       }
       void say(`Probing model \`${command.modelRef}\`...`);
-      const result = await router.probe(model);
-      modelStore.recordProbe(model.target, result);
+      const result = await router.probeModel(model);
 
       void say(
         `Probe result for model \`${command.modelRef}\`:\n\n\`\`\`json\n${JSON.stringify(
