@@ -224,9 +224,24 @@ export const HELP_TEXT = [
     "`model-router/<agent>` directly.",
 ].join("\n");
 export async function handleRouterCommand(prompt, context) {
-    const { config, modelStore, router, say, session } = context;
+    const { config, modelStore, router, say, session, ctx } = context;
     const command = parseCommand(prompt);
     const status = () => formatStatus(config, modelStore, router);
+    const reassign = async (agents) => {
+        return router.assignModels(agents).then(() => {
+            if (!session.agent)
+                return;
+            const newModel = router.cachedAssignments.get(session.agent);
+            if (newModel &&
+                (newModel?.id !== session.model?.id ||
+                    newModel?.providerID !== session.model?.providerID)) {
+                return ctx.session.switchModel({
+                    sessionID: session.id,
+                    model: newModel,
+                });
+            }
+        });
+    };
     switch (command.kind) {
         case "status":
             void say(status());
@@ -237,39 +252,36 @@ export async function handleRouterCommand(prompt, context) {
         case "refresh":
             void say("Refreshing the router...");
             if (command.agents) {
-                void router.assignModels(command.agents).then(() => {
-                    void say(`Router refreshed for agents \`${command.agents?.join(", ")}\`.\n` +
-                        status());
-                });
+                await reassign(command.agents);
+                void say(`Router refreshed for agents \`${command.agents?.join(", ")}\`.\n` +
+                    status());
             }
             else {
-                void router.assignModels().then(() => {
-                    void say("Router refreshed." + "\n" + status());
-                });
+                await reassign();
+                void say("Router refreshed." + "\n" + status());
             }
             break;
         case "strategy":
             config.current.strategy = command.strategy;
             void say(`Routing strategy set to \`${command.strategy}\`. Re-routing...`);
-            void router.assignModels().then(() => {
-                void say(`Routing strategy set to \`${command.strategy}\`. Re-routing complete.` +
-                    "\n" +
-                    status());
-            });
+            await reassign();
+            void say(`Routing strategy set to \`${command.strategy}\`. Re-routing complete.` +
+                "\n" +
+                status());
             break;
         case "pin":
             router.pin(command.agent, command.model);
-            void router.assignModels();
+            await reassign();
             void say(`Pinned agent \`${command.agent}\` to model \`${command.model}\`.`);
             break;
         case "unpin":
             router.unpin(command.agent);
-            void router.assignModels();
+            await reassign();
             void say(`Unpinned agent \`${command.agent}\`.`);
             break;
         case "unpin-all":
             router.pins.clear();
-            void router.assignModels();
+            await reassign();
             void say("Unpinned every agent.");
             break;
         case "help":

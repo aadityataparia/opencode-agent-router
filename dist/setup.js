@@ -36,6 +36,7 @@ export const setup = async (ctx) => {
                     modelStore,
                     router,
                     session: curSession,
+                    ctx,
                     say: async (text) => {
                         try {
                             await ctx.session.synthetic({

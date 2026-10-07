@@ -56,6 +56,7 @@ export const setup: Plugin["setup"] = async (ctx) => {
           modelStore,
           router,
           session: curSession,
+          ctx,
           say: async (text: string) => {
             try {
               await ctx.session.synthetic({

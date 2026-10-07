@@ -3,6 +3,7 @@ import { Config } from "./config";
 import { ModelStore } from "./model-store";
 import { Router } from "./router";
 import type { AgentName, Candidate, RouterConfig, RoutingStrategy } from "./types";
+import { Context } from "@opencode/plugin/promise/plugin";
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
  * state and the side effects. Output goes out as a synthetic session message, so
@@ -75,6 +76,7 @@ export declare function formatStatus(config: Config, store: ModelStore, router: 
 export declare function formatUsable(config: Config, store: ModelStore, router: Router, agent?: AgentName): string;
 export declare const HELP_TEXT: string;
 export declare function handleRouterCommand(prompt: string, context: {
+    ctx: Context;
     config: Config;
     modelStore: ModelStore;
     router: Router;
