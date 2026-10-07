@@ -6,7 +6,6 @@ const DEFAULTS = {
     refreshMs: 60_000,
     probeTimeoutMs: 8_000,
     strategy: "adaptive",
-    minHealth: 0.7,
     agents: {},
     ignoredProviders: [],
 };
@@ -22,7 +21,6 @@ export class Config {
             refreshMs: this.positiveNumber("refreshMs"),
             probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
             strategy: this.strategy(),
-            minHealth: this.clampedNumber("minHealth", 0, 1),
             presets: this.array("presets", this.detectedPresets),
             agents: this.agents(),
             ignoredProviders: this.array("ignoredProviders", []),

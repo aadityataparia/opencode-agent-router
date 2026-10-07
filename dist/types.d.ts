@@ -77,7 +77,6 @@ export interface RouterConfig {
     refreshMs: number;
     probeTimeoutMs: number;
     strategy: RoutingStrategy;
-    minHealth: number;
     /** Agent presets to route for; empty means auto-detect at startup. */
     presets: PresetName[];
     /** Requirement overrides for agents declared in the plugin options; routed regardless of preset. */

@@ -158,16 +158,25 @@ export class Router {
     const candidates = this.getCandidates(agent);
     if (!candidates || candidates.length === 0) return undefined;
 
+    const current = this.cachedAssignments.get(agent);
+    if (current) {
+      const result = await this.probe(current);
+      this.modelStore.recordProbe(current.target, result, 60 * 1000);
+      const model = this.modelStore.getModel(current.target);
+      if (model?.lastProbeResult) {
+        return candidates.find((c) => c.target === current.target);
+      }
+    }
+
     for (const candidate of candidates) {
+      if (candidate.target === current?.target) continue;
+
       if (this.modelStore.needsProbe(candidate.target)) {
         const result = await this.probe(candidate);
         this.modelStore.recordProbe(candidate.target, result, 60 * 1000); // 1 minute cooldown for probe results
       }
       const model = this.modelStore.getModel(candidate.target);
-      if (
-        (model?.health ?? 1) >= this.config.current.minHealth &&
-        model?.lastProbeResult
-      ) {
+      if (model?.lastProbeResult) {
         return candidate;
       }
     }
