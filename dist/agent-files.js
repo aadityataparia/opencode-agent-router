@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { ROUTER_AGENT_PREFIX, } from "./types";
+import { ROUTER_AGENT_PREFIX } from "./types";
 import { logger } from "./logger";
 /**
  * Writes `model-router/<agent>` Markdown files under `~/.config/opencode/agents/`,
@@ -71,14 +71,14 @@ export function syncRoutedAgents(models = new Map()) {
         return { created, updated, removed, kept };
     }
     const routed = new Set();
-    for (const [name, ref] of models) {
+    for (const [name] of models) {
         if (!SAFE_NAME.test(name)) {
             logger.warn(`skipping agent ${name}: not a safe file name`);
             continue;
         }
         routed.add(name);
         const file = join(dir, `${name}.md`);
-        const wanted = document(name, ref?.target);
+        const wanted = document(name);
         if (existsSync(file)) {
             let current;
             try {

@@ -8,12 +8,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  AgentName,
-  Candidate,
-  CompactModel,
-  ROUTER_AGENT_PREFIX,
-} from "./types";
+import { AgentName, CompactModel, ROUTER_AGENT_PREFIX } from "./types";
 import { logger } from "./logger";
 
 /**
@@ -105,7 +100,7 @@ export function syncRoutedAgents(
   }
 
   const routed = new Set<string>();
-  for (const [name, ref] of models) {
+  for (const [name] of models) {
     if (!SAFE_NAME.test(name)) {
       logger.warn(`skipping agent ${name}: not a safe file name`);
       continue;
@@ -113,7 +108,7 @@ export function syncRoutedAgents(
     routed.add(name);
 
     const file = join(dir, `${name}.md`);
-    const wanted = document(name, ref?.target);
+    const wanted = document(name);
 
     if (existsSync(file)) {
       let current: string;
