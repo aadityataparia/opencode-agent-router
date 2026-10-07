@@ -3,8 +3,9 @@ import { logger } from "./logger";
 import { presetAgentNames } from "./presets";
 import { STRATEGY_NAMES, } from "./types";
 const DEFAULTS = {
-    refreshMs: 60_000,
-    probeTimeoutMs: 8_000,
+    refreshMs: 60 * 60_000,
+    cooldownMs: 60_000,
+    probeTimeoutMs: 10_000,
     strategy: "adaptive",
     agents: {},
     ignoredProviders: [],
@@ -20,6 +21,7 @@ export class Config {
         const config = {
             refreshMs: this.positiveNumber("refreshMs"),
             probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
+            cooldownMs: this.positiveNumber("cooldownMs"),
             strategy: this.strategy(),
             presets: this.array("presets", this.detectedPresets),
             agents: this.agents(),

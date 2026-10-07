@@ -87,7 +87,7 @@ export class Router {
                 (failed.length > 0 ? `, failed ${failed.join("; ")}` : ""));
         });
         let disposed = false;
-        const dispose = () => {
+        const dispose = async () => {
             if (disposed)
                 return;
             disposed = true;
@@ -96,7 +96,7 @@ export class Router {
             if (this.transformDisposer === dispose) {
                 this.transformDisposer = undefined;
             }
-            registration.dispose();
+            return registration.dispose();
         };
         this.transformDisposer = dispose;
         return { dispose };
@@ -123,7 +123,7 @@ export class Router {
         const current = this.cachedAssignments.get(agent);
         if (current) {
             const result = await this.probe(current);
-            this.modelStore.recordProbe(current.target, result, 60 * 1000);
+            this.modelStore.recordProbe(current.target, result);
             const model = this.modelStore.getModel(current.target);
             if (model?.lastProbeResult) {
                 return candidates.find((c) => c.target === current.target);
@@ -134,7 +134,7 @@ export class Router {
                 continue;
             if (this.modelStore.needsProbe(candidate.target)) {
                 const result = await this.probe(candidate);
-                this.modelStore.recordProbe(candidate.target, result, 60 * 1000); // 1 minute cooldown for probe results
+                this.modelStore.recordProbe(candidate.target, result); // 1 minute cooldown for probe results
             }
             const model = this.modelStore.getModel(candidate.target);
             if (model?.lastProbeResult) {

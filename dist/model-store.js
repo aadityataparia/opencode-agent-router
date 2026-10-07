@@ -80,11 +80,10 @@ export class ModelStore {
         const current = this.state.get(target);
         if (!current?.lastProbeAt)
             return true;
-        return (Date.now() - current.lastProbeAt >= this.config.current.refreshMs &&
-            !this.isCoolingDown(current));
+        return !this.isCoolingDown(current);
     }
     /** A ping is scored exactly like a real request, so the router learns from one signal. */
-    recordProbe(target, result, cooldownMs) {
+    recordProbe(target, result) {
         const current = this.state.get(target);
         if (!current)
             return;
@@ -93,7 +92,7 @@ export class ModelStore {
             this.success(current, result.latencyMs);
         }
         else {
-            this.failure(current, cooldownMs);
+            this.failure(current, this.config.current.cooldownMs);
         }
     }
 }

@@ -17,5 +17,5 @@ export declare class ModelStore {
     /** True when a probe result is stale enough to re-spend a request on; never-probed models always are. */
     needsProbe(target: string): boolean;
     /** A ping is scored exactly like a real request, so the router learns from one signal. */
-    recordProbe(target: string, result: ProbeResult, cooldownMs: number): void;
+    recordProbe(target: string, result: ProbeResult): void;
 }

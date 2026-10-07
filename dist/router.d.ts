@@ -18,7 +18,7 @@ export declare class Router {
     pin(agent: AgentName, modelTarget: string): void;
     unpin(agent: AgentName): void;
     assignModels(agents?: AgentName[]): Promise<{
-        dispose: () => void;
+        dispose: () => Promise<void>;
     }>;
     private choose;
     private probeAndSelect;

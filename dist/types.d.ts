@@ -76,6 +76,7 @@ export interface Candidate {
 export interface RouterConfig {
     refreshMs: number;
     probeTimeoutMs: number;
+    cooldownMs: number;
     strategy: RoutingStrategy;
     /** Agent presets to route for; empty means auto-detect at startup. */
     presets: PresetName[];

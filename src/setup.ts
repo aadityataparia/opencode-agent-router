@@ -39,7 +39,7 @@ export const setup: Plugin["setup"] = async (ctx) => {
   );
   await router.init();
 
-  await router.assignModels();
+  let agentReg = await router.assignModels();
 
   const commandDisposer = await ctx.command.transform((editor) => {
     editor.add({
@@ -81,7 +81,42 @@ ${text}
   await ctx.command.reload();
   await ctx.agent.reload();
 
+  // Timer
+  const timer = setTimeout(async () => {
+    agentReg = await router.assignModels();
+  }, config.current.refreshMs);
+
+  // Probe hooks
+  await ctx.session.hook("http.request", (req) => {
+    req.request.startTime = Date.now();
+  });
+
+  await ctx.session.hook("http.response", (req) => {
+    const target = `${req.model.providerID}/${req.model.id}`;
+
+    if (!req.request.startTime) return;
+
+    modelStore.recordProbe(target, {
+      verdict: req.response.ok ? "ok" : "unusable",
+      latencyMs: Date.now() - req.request.startTime,
+    });
+
+    if (!req.response.ok) void router.assignModels();
+  });
+
+  await ctx.session.hook("experimental.ws.receive", (req) => {
+    const target = `${req.model.providerID}/${req.model.id}`;
+
+    modelStore.recordProbe(target, {
+      verdict: "ok",
+      latencyMs: 100,
+    });
+  });
+
   return async () => {
     await commandDisposer.dispose();
+    await agentReg?.dispose();
+
+    if (timer) clearTimeout(timer);
   };
 };

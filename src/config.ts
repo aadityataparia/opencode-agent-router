@@ -10,8 +10,9 @@ import {
 } from "./types";
 
 const DEFAULTS: Partial<RouterConfig> = {
-  refreshMs: 60_000,
-  probeTimeoutMs: 8_000,
+  refreshMs: 60 * 60_000,
+  cooldownMs: 60_000,
+  probeTimeoutMs: 10_000,
   strategy: "adaptive",
   agents: {},
   ignoredProviders: [],
@@ -31,6 +32,7 @@ export class Config {
     const config: RouterConfig = {
       refreshMs: this.positiveNumber("refreshMs"),
       probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
+      cooldownMs: this.positiveNumber("cooldownMs"),
       strategy: this.strategy(),
       presets: this.array("presets", this.detectedPresets),
       agents: this.agents(),

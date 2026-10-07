@@ -313,7 +313,7 @@ export async function handleRouterCommand(prompt, context) {
             }
             void say(`Probing model \`${command.modelRef}\`...`);
             const result = await router.probe(model);
-            modelStore.recordProbe(model.target, result, 5 * 60 * 1000);
+            modelStore.recordProbe(model.target, result);
             void say(`Probe result for model \`${command.modelRef}\`:\n\n\`\`\`json\n${JSON.stringify(result, null, 2)}\n\`\`\``);
             break;
         }
