@@ -336,34 +336,17 @@ export const HELP_TEXT = [
 export async function handleRouterCommand(
   prompt: string,
   context: {
-    ctx: Context;
     config: Config;
     modelStore: ModelStore;
     router: Router;
     say: (text: string) => Promise<void>;
     session: SessionInfo;
+    reassign: (agents?: AgentName[]) => Promise<void>;
   },
 ): Promise<void> {
-  const { config, modelStore, router, say, session, ctx } = context;
+  const { config, modelStore, router, say, session, reassign } = context;
   const command = parseCommand(prompt);
   const status = () => formatStatus(config, modelStore, router);
-
-  const reassign = async (agents?: AgentName[]) => {
-    return router.assignModels(agents).then(() => {
-      if (!session.agent) return;
-      const newModel = router.cachedAssignments.get(session.agent as AgentName);
-      if (
-        newModel &&
-        (newModel?.id !== session.model?.id ||
-          newModel?.providerID !== session.model?.providerID)
-      ) {
-        return ctx.session.switchModel({
-          sessionID: session.id,
-          model: newModel,
-        });
-      }
-    });
-  };
 
   switch (command.kind) {
     case "status":

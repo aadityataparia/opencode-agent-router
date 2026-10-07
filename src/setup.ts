@@ -1,4 +1,4 @@
-import { Plugin } from "@opencode/plugin/promise/plugin";
+import { Context, Plugin } from "@opencode/plugin/promise/plugin";
 import { Config } from "./config";
 import { detectPresets } from "./presets";
 import { ModelStore } from "./model-store";
@@ -6,8 +6,32 @@ import { Router } from "./router";
 import { probeModel } from "./probe";
 import { logger } from "./logger";
 import { handleRouterCommand } from "./commands";
+import { SessionInfo } from "@opencode/client";
+import { AgentName } from "./types";
 
 const ROUTER_COMMAND = "router";
+
+const reassign = async (
+  ctx: Context,
+  router: Router,
+  session: SessionInfo,
+  agents?: AgentName[],
+) => {
+  return router.assignModels(agents).then(() => {
+    if (!session.agent) return;
+    const newModel = router.cachedAssignments.get(session.agent as AgentName);
+    if (
+      newModel &&
+      (newModel?.id !== session.model?.id ||
+        newModel?.providerID !== session.model?.providerID)
+    ) {
+      return ctx.session.switchModel({
+        sessionID: session.id,
+        model: newModel,
+      });
+    }
+  });
+};
 
 export const setup: Plugin["setup"] = async (ctx) => {
   await ctx.agent.reload();
@@ -56,7 +80,6 @@ export const setup: Plugin["setup"] = async (ctx) => {
           modelStore,
           router,
           session: curSession,
-          ctx,
           say: async (text: string) => {
             try {
               await ctx.session.synthetic({
@@ -72,6 +95,9 @@ ${text}
                 error,
               );
             }
+          },
+          reassign: (agents?: AgentName[]) => {
+            return reassign(ctx, router, curSession, agents);
           },
         });
       },
@@ -91,7 +117,7 @@ ${text}
     req.request.startTime = Date.now();
   });
 
-  await ctx.session.hook("http.response", (req) => {
+  await ctx.session.hook("http.response", async (req) => {
     const target = `${req.model.providerID}/${req.model.id}`;
 
     if (!req.request.startTime) return;
@@ -101,7 +127,17 @@ ${text}
       latencyMs: Date.now() - req.request.startTime,
     });
 
-    if (!req.response.ok) void router.assignModels();
+    if (!req.response.ok) {
+      const curSession = await ctx.session.get({ sessionID: req.sessionID });
+      if (curSession.agent) {
+        void reassign(
+          ctx,
+          router,
+          await ctx.session.get({ sessionID: req.sessionID }),
+          [curSession.agent as AgentName],
+        );
+      }
+    }
   });
 
   await ctx.session.hook("experimental.ws.receive", (req) => {

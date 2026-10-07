@@ -224,24 +224,9 @@ export const HELP_TEXT = [
     "`model-router/<agent>` directly.",
 ].join("\n");
 export async function handleRouterCommand(prompt, context) {
-    const { config, modelStore, router, say, session, ctx } = context;
+    const { config, modelStore, router, say, session, reassign } = context;
     const command = parseCommand(prompt);
     const status = () => formatStatus(config, modelStore, router);
-    const reassign = async (agents) => {
-        return router.assignModels(agents).then(() => {
-            if (!session.agent)
-                return;
-            const newModel = router.cachedAssignments.get(session.agent);
-            if (newModel &&
-                (newModel?.id !== session.model?.id ||
-                    newModel?.providerID !== session.model?.providerID)) {
-                return ctx.session.switchModel({
-                    sessionID: session.id,
-                    model: newModel,
-                });
-            }
-        });
-    };
     switch (command.kind) {
         case "status":
             void say(status());
