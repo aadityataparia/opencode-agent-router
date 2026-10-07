@@ -1,5 +1,7 @@
+/** @jsxImportSource @opentui/solid */
+
 import { readFileSync } from "node:fs";
-import { createElement, insert, setProp } from "@opentui/solid";
+import { createElement, insert, JSX, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
 import { logger } from "./logger";
 
@@ -32,7 +34,7 @@ interface Route {
 type TuiContext = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0];
 type TuiLocation = ReturnType<TuiContext["data"]["location"]["default"]>;
 type Theme = TuiContext["theme"];
-type BaseRenderable = ReturnType<typeof createElement>;
+type BaseRenderable = JSX.Element;
 
 export const OpenCodeAgentRouterTui = Plugin.define({
   id: "opencode-agent-router.tui",
@@ -175,22 +177,19 @@ export default OpenCodeAgentRouterTui;
 
 /* ---------------------------------------------------------------- rendering */
 
-type PropType = string | number | Theme["text"]["base"] | boolean;
+type PropType =
+  | string
+  | number
+  | Theme["text"]["base"]
+  | boolean
+  | (() => void);
 
 function element(
-  tag: string,
+  Tag: "box" | "text",
   props: Record<string, PropType> = {},
-  children: unknown[] = [],
+  children: any[] = [],
 ): BaseRenderable {
-  const node = createElement(tag);
-  for (const [key, value] of Object.entries(props)) {
-    if (value !== undefined) setProp(node, key, value);
-  }
-  for (const child of children) {
-    if (child === null || child === undefined || child === false) continue;
-    insert(node, child);
-  }
-  return node;
+  return <Tag {...props}>{children}</Tag>;
 }
 
 const box = (
@@ -222,6 +221,7 @@ function header(
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
+      onClick: onToggle,
     },
     [
       box({ paddingRight: 1, backgroundColor: theme.background.raised.base }, [
@@ -233,7 +233,7 @@ function header(
     ],
   );
 
-  return interactive(row, onToggle);
+  return row;
 }
 
 function routeRow(
@@ -304,15 +304,6 @@ function emptyState(
       ]),
     ]),
   ];
-}
-
-/** Click to activate, like the host's sidebar rows. No hover fill: clearing it means setting a prop to `undefined`. */
-function interactive(
-  node: BaseRenderable,
-  onActivate: () => void,
-): BaseRenderable {
-  setProp(node, "onMouseUp", () => onActivate());
-  return node;
 }
 
 /* -------------------------------------------------------------------- state */

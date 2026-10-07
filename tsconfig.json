@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "jsx": "react",
     "target": "ES2023",
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -12,5 +13,5 @@
     "rootDir": "src",
     "types": ["node"]
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/tui.tsx"]
 }
