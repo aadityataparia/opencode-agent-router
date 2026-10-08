@@ -101,6 +101,13 @@ export class Router {
           : undefined;
         for (const id of [routerAgentID(agentName), agentName]) {
           try {
+            const prev = editor.get(id);
+            if (
+              prev?.model?.id === model?.id &&
+              prev?.model?.providerID === model?.providerID
+            )
+              continue;
+
             editor.update(id, (agent) => {
               agent.id = Agent.ID.make(id);
               agent.name = Agent.Name.make(id);
