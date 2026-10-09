@@ -30,6 +30,7 @@ export default defineConfig({
       output: {
         format: "es",
         entryFileNames: "[name].js",
+        chunkFileNames: "chunks/[name]-[hash].js",
       },
     },
   },

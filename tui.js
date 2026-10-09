@@ -1,4 +1,4 @@
-import { t as logger } from "./logger-BB4yfKgq.js";
+import { t as logger } from "./chunks/logger-BB4yfKgq.js";
 import { readFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";

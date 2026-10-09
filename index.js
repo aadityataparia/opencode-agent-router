@@ -1,4 +1,4 @@
-import { t as logger } from "./logger-BB4yfKgq.js";
+import { t as logger } from "./chunks/logger-BB4yfKgq.js";
 import { Agent, Model, Plugin, Provider } from "@opencode/plugin";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -1213,18 +1213,18 @@ var HELP_TEXT = [
 	"| command | effect |",
 	"| --- | --- |",
 	"| `/router` | show routing status |",
-	"| `/router usable <agent?>` | list every model the router can currently pick |",
-	"| `/router refresh` | re-scan providers and re-route now, ignoring probe cache and cooldown |",
-	"| `/router strategy <name>` | switch routing strategy and re-route now (session-only) |",
-	"| `/router pin <agent> <model>` | force one agent onto one model, persisted |",
+	"| `/router usable <agent>` | show the pool for one agent (defaults to the current session agent) |",
+	"| `/router refresh [<agent>...]` | re-run routing now, optionally for specific agents; re-probes models that are not cooling down |",
+	"| `/router strategy <name>` | switch routing strategy and re-run now (session-only, reset on restart) Set in options to persist |",
+	"| `/router pin <agent> <model>` | force one agent onto one model (saved to plugin storage, survives restart) |",
 	"| `/router unpin <agent>` | drop one pin |",
-	"| `/router unpin` | drop every pin |",
-	"| `/router debug <model>` | show one model's capabilities and score breakdown |",
+	"| `/router unpin` | drop every pin (also `/router pin --clear`) |",
+	"| `/router debug <model>` | show one model's stored record (health, latency, cooldown) |",
 	"| `/router probe <model>` | ping one model now and report the raw result |",
 	"",
-	"Pins live in memory for this session only and are lost on restart. For a",
-	"permanent change, set `presets` in the plugin options or point the agent at",
-	"`model-router/<agent>` directly."
+	"`refresh` does not re-scan providers, and cooling-down models keep their last verdict.",
+	"`Pins` are stored by the plugin and survive restarts;",
+	"`Aliases`: status = show/list · refresh = reload/rescan · usable = pool/models · unpin = reset · probe = ping · help = ?"
 ].join("\n");
 async function handleRouterCommand(prompt, context) {
 	const { config, modelStore, router, say, session, reassign } = context;
