@@ -7,14 +7,6 @@ import { logger } from "./logger";
 const ROUTER_AGENT_PREFIX = "model-router/";
 const REFRESH_MS = 5_000;
 
-interface TraceEntry {
-  readonly at: string;
-  readonly event: string;
-}
-
-/** Read once per process; the file is rewritten whole on every append anyway. */
-let traceEntries: TraceEntry[] | undefined;
-
 interface SelectedModel {
   readonly providerID: string;
   readonly id: string;
@@ -25,7 +17,6 @@ interface SelectedModel {
 
 interface Route {
   readonly agent: string;
-  /** Undefined while the agent exists but the router has not assigned a model yet. */
   readonly target?: string;
 }
 
@@ -112,6 +103,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     const rebuild = (): void => {
       if (disposed) return;
       disposeSlot?.();
+      disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
       ctx.renderer.requestRender();
     };
 
@@ -149,7 +141,6 @@ export const OpenCodeAgentRouterTui = Plugin.define({
       });
     }, REFRESH_MS);
 
-    disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
     onChange("init");
 
     return () => {
@@ -384,7 +375,7 @@ function stateSignature(ctx: TuiContext, routes: readonly Route[]): string {
 function readVersion(): string {
   try {
     const raw = readFileSync(
-      new URL("../package.json", import.meta.url),
+      new URL("./package.json", import.meta.url),
       "utf8",
     );
     const parsed = JSON.parse(raw) as { version?: string };
