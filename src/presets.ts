@@ -1,30 +1,12 @@
-import { readFileSync, statSync } from "node:fs";
+import { PluginListOutput } from "@opencode/client";
+import { AgentName, PRESET_NAMES, PresetName } from "./types";
+import { resolve } from "node:path";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { logger } from "./logger";
+import { readFileSync } from "node:fs";
+import { parseJSON5, parseJSONC } from "confbox";
 
-/**
- * Which agents are routable depends on which orchestrator plugin is installed,
- * so routing every known agent unconditionally produces agents the user's setup
- * does not have. Each list below is that plugin's own agent list, read from its
- * published package: `BuiltinAgentNameSchema` in oh-my-opencode(-agent)'s
- * `agent-names.d.ts`, `ALL_AGENT_NAMES` in oh-my-opencode-slim's `constants.js`.
- */
-
-/** Preset identifiers accepted by the `presets` option. */
-export const PRESET_NAMES = [
-  "oh-my-opencode",
-  "oh-my-openagent",
-  "oh-my-opencode-slim",
-] as const;
-
-export type PresetName = (typeof PRESET_NAMES)[number];
-
-export function isPresetName(value: string): value is PresetName {
-  return (PRESET_NAMES as readonly string[]).includes(value);
-}
-
-/** The 11 builtins oh-my-opencode and oh-my-openagent share. */
-const OMO_BUILTIN_AGENTS = [
+const OMO_BUILTIN_AGENTS: AgentName[] = [
   "sisyphus",
   "hephaestus",
   "prometheus",
@@ -38,8 +20,7 @@ const OMO_BUILTIN_AGENTS = [
   "sisyphus-junior",
 ];
 
-/** Agents each preset defines; names this router has no requirements for are not routed. */
-export const PRESET_AGENTS: Record<PresetName, readonly string[]> = {
+export const PRESET_AGENTS: Record<PresetName, readonly AgentName[]> = {
   "oh-my-opencode": OMO_BUILTIN_AGENTS,
   "oh-my-openagent": OMO_BUILTIN_AGENTS,
   "oh-my-opencode-slim": [
@@ -55,126 +36,55 @@ export const PRESET_AGENTS: Record<PresetName, readonly string[]> = {
   ],
 };
 
-/** Union of every agent name across all presets, deduplicated. */
-export function presetAgentNames(presets: readonly PresetName[]): string[] {
-  const names = new Set<string>();
+export function presetAgentNames(presets: readonly PresetName[]): AgentName[] {
+  const names = new Set<AgentName>();
   for (const preset of presets) {
     for (const agent of PRESET_AGENTS[preset]) names.add(agent);
   }
   return [...names];
 }
 
-/**
- * Detection reads the config's `plugin` list, not the package cache: a package
- * can sit in the cache after removal, and routing for an uninstalled plugin is
- * what this exists to prevent. Inconclusive detection returns every preset.
- */
-export function detectPresets(): PresetName[] {
-  const declared = readDeclaredPlugins();
-  if (declared === undefined) return [...PRESET_NAMES];
+const files = [
+  resolve(homedir(), ".config", "opencode", "opencode.jsonc"),
+  resolve(homedir(), ".config", "opencode", "opencode.json"),
+  resolve(process.cwd(), "opencode.jsonc"),
+  resolve(process.cwd(), "opencode.json"),
+];
 
-  const found = PRESET_NAMES.filter((preset) => {
-    return declared.some(
-      (entry) => entry === preset || entry.startsWith(`${preset}@`),
-    );
-  });
+export function detectPresets(plugins: PluginListOutput["data"]): PresetName[] {
+  const foundFromFile: PresetName[] = [];
+  for (const file of files) {
+    try {
+      const config = (
+        file.endsWith(".jsonc")
+          ? parseJSONC(readFileSync(file, { encoding: "utf-8" }))
+          : parseJSON5(readFileSync(file, { encoding: "utf-8" }))
+      ) as { plugins: (string | { package: string })[] };
+      if (config?.plugins) {
+        for (const preset of config.plugins) {
+          if (typeof preset === "string") {
+            if (PRESET_NAMES.includes(preset as PresetName))
+              foundFromFile.push(preset as PresetName);
+          } else if (preset.package) {
+            if (PRESET_NAMES.includes(preset.package as PresetName))
+              foundFromFile.push(preset.package as PresetName);
+          }
+        }
+      }
+    } catch (e) {
+      logger.error("Error in reading from file", file, e);
+    }
+  }
+
+  if (foundFromFile.length > 0) {
+    return foundFromFile;
+  }
+
+  const found = PRESET_NAMES.filter((preset) =>
+    plugins.some(
+      (entry) => entry.id === preset || entry.id?.startsWith(`${preset}@`),
+    ),
+  );
 
   return found;
-}
-
-/** Plugin names from the config; `present` is false when no config could be read. */
-function readDeclaredPlugins(): string[] | undefined {
-  const names: string[] = [];
-
-  for (const file of configFiles()) {
-    const raw = readConfigFile(file);
-    if (raw === undefined) continue;
-    names.push(...extractPluginEntries(raw));
-  }
-
-  return names.length > 0 ? names : undefined;
-}
-
-/** Config locations OpenCode reads, most specific first. */
-function configFiles(): string[] {
-  const home = homedir();
-  const fromEnv = process.env.OPENCODE_CONFIG?.trim();
-  const files = fromEnv ? [fromEnv] : [];
-
-  files.push(
-    join(home, ".config", "opencode", "opencode.json"),
-    join(home, ".config", "opencode", "opencode.jsonc"),
-    join(process.cwd(), "opencode.json"),
-    join(process.cwd(), "opencode.jsonc"),
-  );
-  return files;
-}
-
-function readConfigFile(path: string): string | undefined {
-  try {
-    if (!statSync(path).isFile()) return undefined;
-    return readFileSync(path, "utf8");
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Reads only the `plugin`/`plugins` array, so no JSONC parser is needed: a
- * bounded scan cannot mangle the rest of the file.
- */
-function extractPluginEntries(raw: string): string[] {
-  const entries: string[] = [];
-  const keyPattern = /"(?:plugin|plugins)"\s*:\s*\[/g;
-
-  for (const match of raw.matchAll(keyPattern)) {
-    const start = (match.index ?? 0) + match[0].length;
-    const end = findArrayEnd(raw, start);
-    if (end === undefined) continue;
-
-    for (const element of raw
-      .slice(start, end)
-      .matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
-      entries.push(unescapeJson(element[1] ?? ""));
-    }
-  }
-
-  return entries;
-}
-
-/** Index just past the `]` closing the array that starts at `start`. */
-function findArrayEnd(raw: string, start: number): number | undefined {
-  let depth = 1;
-  let inString = false;
-
-  for (let i = start; i < raw.length; i++) {
-    const char = raw[i];
-
-    if (inString) {
-      if (char === "\\") i++;
-      else if (char === '"') inString = false;
-      continue;
-    }
-
-    if (char === '"') inString = true;
-    else if (char === "[") depth++;
-    else if (char === "]" && --depth === 0) return i;
-  }
-
-  return undefined;
-}
-
-function unescapeJson(value: string): string {
-  return value.replace(/\\(.)/g, (_, char: string) => {
-    switch (char) {
-      case "n":
-        return "\n";
-      case "t":
-        return "\t";
-      case "r":
-        return "\r";
-      default:
-        return char;
-    }
-  });
 }

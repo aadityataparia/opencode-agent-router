@@ -1,10 +1,16 @@
-import { isRoutingStrategy, STRATEGY_NAMES } from "./config";
+import { SessionInfo } from "@opencode/client";
+import { Config } from "./config";
+import { ModelStore } from "./model-store";
+import { Router } from "./router";
+import { ROUTER_AGENT_PREFIX, STRATEGY_NAMES } from "./types";
 import type {
+  AgentName,
   Candidate,
   DiscoveredModel,
   RouterConfig,
   RoutingStrategy,
 } from "./types";
+import { Context } from "@opencode/plugin/promise/plugin";
 
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
@@ -17,7 +23,7 @@ export const ROUTER_COMMAND = "router";
 export type ParsedCommand =
   | { kind: "status" }
   | { kind: "help" }
-  | { kind: "refresh" }
+  | { kind: "refresh"; agents?: string[] }
   | { kind: "strategy"; strategy: RoutingStrategy }
   | { kind: "usable"; filter?: string }
   | { kind: "pin"; agent: string; model: string }
@@ -54,7 +60,7 @@ export function parseCommand(text: string): ParsedCommand {
   if (verb === "refresh" || verb === "reload" || verb === "rescan") {
     return rest.length === 0
       ? { kind: "refresh" }
-      : { kind: "error", message: `\`refresh\` takes no arguments.` };
+      : { kind: "refresh", agents: rest };
   }
 
   if (verb === "strategy" || verb === "presets") {
@@ -72,18 +78,18 @@ export function parseCommand(text: string): ParsedCommand {
       };
     }
     const wanted = rest[0].trim().toLowerCase();
-    if (!isRoutingStrategy(wanted)) {
+    if (!STRATEGY_NAMES.includes(wanted as RoutingStrategy)) {
       return {
         kind: "error",
         message: `Unknown strategy \`${rest[0]}\`. Valid: ${valid}.`,
       };
     }
-    return { kind: "strategy", strategy: wanted };
+    return { kind: "strategy", strategy: wanted as RoutingStrategy };
   }
 
   if (verb === "help" || verb === "?") return { kind: "help" };
 
-  if (verb === "unpin") {
+  if (verb === "unpin" || verb === "reset") {
     if (rest.length === 0) return { kind: "unpin-all" };
     if (rest.length > 1) {
       return {
@@ -93,8 +99,6 @@ export function parseCommand(text: string): ParsedCommand {
     }
     return { kind: "unpin", agent: rest[0] };
   }
-
-  if (verb === "reset") return { kind: "unpin-all" };
 
   if (verb === "usable" || verb === "models" || verb === "pool") {
     return { kind: "usable", filter: rest.join(" ") };
@@ -149,41 +153,6 @@ function normalize(value: string): string {
   return value.trim().toLowerCase();
 }
 
-/**
- * Accepts `provider/model` or a bare `model`, but a bare name only when it is
- * unambiguous — silently picking between same-named models would route an agent
- * somewhere the user did not choose.
- */
-export function findModel(
-  models: readonly DiscoveredModel[],
-  ref: string,
-): DiscoveredModel | undefined {
-  const wanted = normalize(ref);
-
-  const byQualified = models.filter(
-    (model) => normalize(model.target) === wanted,
-  );
-  if (byQualified.length > 0) return byQualified[0];
-
-  const byBare = models.filter(
-    (model) =>
-      normalize(model.id) === wanted ||
-      (model.modelID !== undefined && normalize(model.modelID) === wanted),
-  );
-  if (byBare.length === 1) return byBare[0];
-
-  return undefined;
-}
-
-/** How many models a bare reference is ambiguous between, for a better error. */
-export function countMatches(
-  models: readonly DiscoveredModel[],
-  ref: string,
-): DiscoveredModel[] {
-  const wanted = normalize(ref);
-  return models.filter((model) => model.target.includes(wanted));
-}
-
 export interface StatusView {
   config: RouterConfig;
   /** Agent -> chosen model for the routed agents currently published. */
@@ -218,34 +187,50 @@ function formatDuration(ms: number): string {
 
 function healthCell(model: DiscoveredModel, now: number): string {
   if (model.cooldownUntil && model.cooldownUntil > now) {
-    return `${model.health.toFixed(2)} (cooling)`;
+    return `${model.health.toFixed(2)} (cooling) (${model.successes} ok / ${model.failures} failed)`;
   }
-  return model.health.toFixed(2);
+  return (
+    model.health.toFixed(2) +
+    ` (${model.successes} ok / ${model.failures} failed)`
+  );
 }
 
-export function formatStatus(view: StatusView): string {
-  const { config } = view;
+export function tableRow(...cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+export function table(header: string[], rows: string[][]): string {
+  const lines: string[] = [];
+  lines.push(tableRow(...header), tableRow(...header.map(() => "---")));
+  for (const row of rows) {
+    lines.push(tableRow(...row));
+  }
+  return lines.join("\n");
+}
+
+export function formatStatus(
+  config: Config,
+  store: ModelStore,
+  router: Router,
+): string {
   const lines: string[] = [];
 
   lines.push(
-    `**model-router** · ${config.strategy} · probe ${config.probe ? "on" : "off"} · presets: ${config.presets.join(", ") || "none detected"}`,
+    `**model-router** · ${config.current.strategy} · presets: ${config.current.presets.join(", ") || "none detected"}`,
+    "",
   );
-  lines.push("");
 
-  const routed = view.routedAgents;
+  const routed = Array.from(router.cachedAssignments.keys());
   if (routed.length === 0) {
     lines.push(
       "No agents are in scope. Set `presets` in the plugin options, or declare an `agents` entry.",
     );
   } else {
-    lines.push(
-      "| agent | model | health | latency | note |",
-      "| --- | --- | --- | --- | --- |",
-    );
+    lines.push(table(["agent", "model", "health", "latency", "note"], []));
 
     for (const agent of routed) {
-      const { model } = view.assignments.get(agent) ?? {};
-      const pin = view.pins.get(agent);
+      const model = router.cachedAssignments.get(agent);
+      const pin = router.pins.get(agent);
 
       if (!model) {
         const note = pin ? "pinned model unavailable" : "no candidate";
@@ -255,61 +240,40 @@ export function formatStatus(view: StatusView): string {
 
       const notes: string[] = [];
       if (pin) {
-        // A pin that no longer resolves would otherwise look identical to a
-        // satisfied one, which is the kind of thing that goes unnoticed for days.
         notes.push(
           normalize(model.target) === normalize(pin)
             ? "pinned"
             : `pin \`${pin}\` unavailable, routed instead`,
         );
       }
-      if (
-        view.authBlocked.some(([provider]) => provider === model.providerID)
-      ) {
-        notes.push("auth blocked");
+
+      const modelData = store.getModel(model.target);
+      if (!modelData) {
+        notes.push("model not in store");
       }
 
       lines.push(
-        `| \`${agent}\` | \`${model.target}\` | ${healthCell(model, view.now)} | ${Number.isFinite(model.latencyMs) ? `${model.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
+        `| \`${agent}\` | \`${model.target}\` | ${healthCell(modelData!, Date.now())} | ${Number.isFinite(modelData?.latencyMs) ? `${modelData?.latencyMs.toFixed(0)}ms` : "—"} | ${notes.join("; ") || "—"} |`,
       );
     }
-  }
-
-  lines.push("");
-  lines.push(
-    `${view.discovered} model(s) discovered · ${view.routable} routable · ${view.coolingDown} cooling down`,
-  );
-
-  if (view.authBlocked.length > 0) {
-    const detail = view.authBlocked
-      .map(([provider, count]) => `\`${provider}\` (${count})`)
-      .join(", ");
-    lines.push(
-      `⚠ auth blocked: ${detail} — reconnect with \`opencode auth login\``,
-    );
-  }
-
-  if (view.lastRun) {
-    const { at, reason, probed, usable } = view.lastRun;
-    const probeNote = config.probe
-      ? ` · probed ${usable}/${probed} usable`
-      : "";
-    lines.push(
-      `last refresh ${formatDuration(view.now - at)} ago (${reason})${probeNote} · next in ${formatDuration(config.refreshMs)}`,
-    );
-  } else {
-    lines.push(
-      `no refresh has completed yet · next in ${formatDuration(config.refreshMs)}`,
-    );
   }
 
   return lines.join("\n");
 }
 
 /** The pool a routing pass can choose from, for `/router usable`. */
-export function formatUsable(view: StatusView): string {
+export function formatUsable(
+  config: Config,
+  store: ModelStore,
+  router: Router,
+  agent?: AgentName,
+): string {
+  if (!agent) {
+    return `No agent specified. Run \`/router usable <agent>\` to see the pool for one agent.`;
+  }
+
   const lines: string[] = [];
-  const pool = [...(view.pool ?? [])].sort((a, b) => b.score - a.score);
+  const pool = router.getCandidates(agent) || [];
 
   if (pool.length === 0) {
     return [
@@ -321,23 +285,28 @@ export function formatUsable(view: StatusView): string {
   }
 
   lines.push(
-    `**${view.routable} model(s) routable** · ${pool.length} usable for ${view.currentAgent} · probe ${view.config.probe ? "on" : "off"} · ${view.discovered} discovered`,
+    `**${pool.length} model(s) routable** · ${pool.length} usable for ${agent} · ${store.getAllModels().length} discovered`,
     "",
-    `| model | health | score (for ${view.currentAgent}) | latency |`,
+    `| model | health | score (for ${agent}) | latency |`,
     "| --- | --- | --- | --- |",
   );
 
-  for (const { model, score } of pool) {
+  for (const model of pool) {
+    const modelData = store.getModel(model.target);
+    if (!modelData) {
+      lines.push(`| \`${model.target}\` | — | — | — | model not in store |`);
+      continue;
+    }
     const latency =
-      Number.isFinite(model.latencyMs) && model.latencyMs > 0
-        ? `${model.latencyMs.toFixed(0)}ms`
+      Number.isFinite(modelData.latencyMs) && modelData.latencyMs > 0
+        ? `${modelData.latencyMs.toFixed(0)}ms`
         : "—";
     const seen =
-      model.lastProbeAt === undefined
+      modelData.lastProbeAt === undefined
         ? ""
-        : ` · ${model.successes} ok / ${model.failures} failed`;
+        : ` · ${modelData.successes} ok / ${modelData.failures} failed`;
     lines.push(
-      `| \`${model.target}\` | ${healthCell(model, view.now)}${seen} | ${score.toFixed(2)} | ${latency} |`,
+      `| \`${model.target}\` | ${healthCell(modelData, Date.now())}${seen} | ${model.score.toFixed(2)} | ${latency} |`,
     );
   }
 
@@ -350,16 +319,150 @@ export const HELP_TEXT = [
   "| command | effect |",
   "| --- | --- |",
   "| `/router` | show routing status |",
-  "| `/router usable` | list every model the router can currently pick |",
-  "| `/router refresh` | re-scan providers and re-probe now, ignoring probe cache and cooldown |",
-  "| `/router strategy <name>` | switch routing strategy and re-route now (session-only) |",
-  "| `/router pin <agent> <model>` | force one agent onto one model |",
+  "| `/router usable <agent>` | show the pool for one agent (defaults to the current session agent) |",
+  "| `/router refresh [<agent>...]` | re-run routing now, optionally for specific agents; re-probes models that are not cooling down |",
+  "| `/router strategy <name>` | switch routing strategy and re-run now (session-only, reset on restart) Set in options to persist |",
+  "| `/router pin <agent> <model>` | force one agent onto one model (saved to plugin storage, survives restart) |",
   "| `/router unpin <agent>` | drop one pin |",
-  "| `/router unpin` | drop every pin |",
-  "| `/router debug <model>` | show one model's capabilities and score breakdown |",
+  "| `/router unpin` | drop every pin (also `/router pin --clear`) |",
+  "| `/router debug <model>` | show one model's stored record (health, latency, cooldown) |",
   "| `/router probe <model>` | ping one model now and report the raw result |",
   "",
-  "Pins live in memory for this session only and are lost on restart. For a",
-  "permanent change, set `presets` in the plugin options or point the agent at",
-  "`model-router/<agent>` directly.",
+  "`refresh` does not re-scan providers, and cooling-down models keep their last verdict.",
+  "`Pins` are stored by the plugin and survive restarts;",
+  "`Aliases`: status = show/list · refresh = reload/rescan · usable = pool/models · unpin = reset · probe = ping · help = ?",
 ].join("\n");
+
+export async function handleRouterCommand(
+  prompt: string,
+  context: {
+    config: Config;
+    modelStore: ModelStore;
+    router: Router;
+    say: (text: string) => Promise<void>;
+    session: SessionInfo;
+    reassign: (agents?: AgentName[]) => Promise<void>;
+  },
+): Promise<void> {
+  const { config, modelStore, router, say, session, reassign } = context;
+  const command = parseCommand(prompt);
+  const status = () => formatStatus(config, modelStore, router);
+
+  switch (command.kind) {
+    case "status":
+      void say(status());
+      break;
+    case "usable":
+      if (!session.agent) {
+        void say("Agent is not supported");
+      }
+      void say(
+        formatUsable(
+          config,
+          modelStore,
+          router,
+          (command.filter ||
+            session.agent?.replace(ROUTER_AGENT_PREFIX, "")) as AgentName,
+        ),
+      );
+      break;
+    case "refresh":
+      void say("Refreshing the router...");
+      if (command.agents) {
+        await reassign(command.agents as AgentName[]);
+        void say(
+          `Router refreshed for agents \`${command.agents?.join(", ")}\`.\n` +
+            status(),
+        );
+      } else {
+        await reassign();
+        void say("Router refreshed." + "\n" + status());
+      }
+      break;
+    case "strategy":
+      config.current.strategy = command.strategy;
+      void say(
+        `Routing strategy set to \`${command.strategy}\`. Re-routing...`,
+      );
+      await reassign();
+      void say(
+        `Routing strategy set to \`${command.strategy}\`. Re-routing complete.` +
+          "\n" +
+          status(),
+      );
+      break;
+    case "pin":
+      router.pin(command.agent as AgentName, command.model);
+      await reassign();
+      void say(
+        `Pinned agent \`${command.agent}\` to model \`${command.model}\`.`,
+      );
+      break;
+    case "unpin":
+      router.unpin(command.agent as AgentName);
+      await reassign();
+      void say(`Unpinned agent \`${command.agent}\`.`);
+      break;
+    case "unpin-all":
+      router.pins.clear();
+      await reassign();
+      void say("Unpinned every agent.");
+      break;
+    case "help":
+      void say(HELP_TEXT);
+      break;
+    case "error":
+      void say(`Error: ${command.message}`);
+      break;
+    case "debug": {
+      const model = modelStore.getModel(command.modelRef);
+      if (!model) {
+        void say(
+          `Model \`${command.modelRef}\` not found in the store. Similar models: ${
+            modelStore
+              .getAllModels(command.modelRef)
+              .map((m) => `\`${m.target}\``)
+              .join(", ") || "none"
+          }`,
+        );
+        return;
+      }
+      void say(
+        `Debug for model \`${command.modelRef}\`:\n\n\`\`\`json\n${JSON.stringify(
+          model,
+          null,
+          2,
+        )}\n\`\`\``,
+      );
+      break;
+    }
+    case "probe": {
+      const model = modelStore.getModel(command.modelRef);
+      if (!model) {
+        void say(
+          `Model \`${command.modelRef}\` not found in the store. Similar models: ${
+            modelStore
+              .getAllModels(command.modelRef)
+              .map((m) => `\`${m.target}\``)
+              .join(", ") || "none"
+          }`,
+        );
+        return;
+      }
+      void say(`Probing model \`${command.modelRef}\`...`);
+      const result = await router.probeModel(model);
+
+      void say(
+        `Probe result for model \`${command.modelRef}\`:\n\n\`\`\`json\n${JSON.stringify(
+          result,
+          null,
+          2,
+        )}\n\`\`\``,
+      );
+
+      break;
+    }
+    default:
+      void say(`Unhandled command: ${prompt}`);
+  }
+}

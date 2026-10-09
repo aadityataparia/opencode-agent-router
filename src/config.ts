@@ -1,241 +1,150 @@
-import { detectPresets, PRESET_NAMES, type PresetName } from "./presets";
-import type { AgentRequirements, RouterConfig, RoutingStrategy } from "./types";
+import { AGENT_REQUIREMENTS } from "./agents";
+import { logger } from "./logger";
+import { presetAgentNames } from "./presets";
+import {
+  AgentRequirements,
+  PresetName,
+  RouterConfig,
+  RoutingStrategy,
+  STRATEGY_NAMES,
+} from "./types";
 
-/**
- * Every setting resolves in the same order: environment variable
- * (`OCO_ROUTER_*`), then plugin options, then the built-in default. Env wins
- * because it is the more ad-hoc layer — it is what a one-off
- * `OCO_ROUTER_LOG=true opencode` sets.
- */
+const DEFAULTS: Partial<RouterConfig> = {
+  refreshMs: 60 * 60_000,
+  cooldownMs: 60_000,
+  probeTimeoutMs: 10_000,
+  strategy: "adaptive",
+  agents: {},
+  ignoredProviders: [],
+};
 
-/** The `ctx.options` object the host passes to `setup`. */
-export type PluginOptions = Readonly<Record<string, unknown>>;
+export class Config {
+  detectedPresets: PresetName[];
 
-/** Every strategy the router can be asked for, in the order they are offered. */
-export const STRATEGY_NAMES = [
-  "adaptive",
-  "latency",
-  "cost",
-  "weighted",
-  "round-robin",
-] as const satisfies readonly RoutingStrategy[];
+  constructor(
+    private readonly raw: Partial<RouterConfig>,
+    detectedPresets: PresetName[] = [],
+  ) {
+    this.detectedPresets = detectedPresets;
+  }
 
-export function isRoutingStrategy(
-  value: string,
-): value is RoutingStrategy {
-  return (STRATEGY_NAMES as readonly string[]).includes(value);
-}
+  get current(): RouterConfig {
+    const config: RouterConfig = {
+      refreshMs: this.positiveNumber("refreshMs"),
+      probeTimeoutMs: this.positiveNumber("probeTimeoutMs"),
+      cooldownMs: this.positiveNumber("cooldownMs"),
+      strategy: this.strategy(),
+      presets: this.array("presets", this.detectedPresets),
+      agents: this.agents(),
+      ignoredProviders: this.array("ignoredProviders", []),
+    };
 
-/** Where a resolved value came from, for the startup summary. */
-type Source = "env" | "config" | "default";
+    return config;
+  }
 
-const ENV_PREFIX = "OCO_ROUTER_";
+  private array<T>(key: keyof RouterConfig, defaultValue: T[]): T[] {
+    const value = this.raw[key];
+    if (value === undefined) return defaultValue;
 
-function warn(message: string): void {
-  // console.error so diagnostics surface in `--print-logs` output.
-  console.error(`[opencode-agent-router] ${message}`);
-}
-
-class Resolver {
-  private readonly origins = new Map<string, Source>();
-
-  constructor(private readonly options: PluginOptions) {}
-
-  /**
-   * An empty env var is unset: `OCO_ROUTER_PROBE=` means "no preference", and
-   * letting it win would silently mean `false`.
-   */
-  private raw(key: string): { value: unknown; source: Source } {
-    const env = process.env[ENV_PREFIX + envSuffix(key)];
-    if (env !== undefined && env.trim() !== "") {
-      return { value: env, source: "env" };
+    if (!Array.isArray(value)) {
+      logger.trace(`ignoring ${key}: expected an array`);
+      return defaultValue;
     }
 
-    const fromOptions = this.options[key];
-    if (fromOptions !== undefined && fromOptions !== null) {
-      return { value: fromOptions, source: "config" };
+    if (value.length === 0) return defaultValue;
+
+    return value as T[];
+  }
+
+  private boolean(key: keyof RouterConfig, defaultValue: boolean): boolean {
+    const value = this.raw[key];
+    if (value === undefined) return defaultValue;
+
+    if (typeof value !== "boolean") {
+      logger.trace(`ignoring ${key}: expected a boolean`);
+      return defaultValue;
     }
 
-    return { value: undefined, source: "default" };
+    return value;
   }
 
-  source(key: string): Source {
-    return this.origins.get(key) ?? "default";
-  }
+  private positiveNumber(key: keyof RouterConfig): number {
+    const value = this.raw[key];
+    if (value === undefined) return DEFAULTS[key] as number;
 
-  private note(key: string, source: Source): void {
-    this.origins.set(key, source);
-  }
-
-  /** A positive number. Zero and negatives are rejected as likely mistakes. */
-  positiveNumber(key: string, fallback: number): number {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    const parsed =
-      typeof value === "number" ? value : Number(String(value).trim());
-    if (!Number.isFinite(parsed) || parsed <= 0) {
-      warn(
-        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
-      );
-      return fallback;
+    if (typeof value !== "number" || value <= 0) {
+      logger.trace(`ignoring ${key}: expected a positive number`);
+      return DEFAULTS[key] as number;
     }
 
-    this.note(key, source);
-    return parsed;
+    return value;
   }
 
-  /** A number clamped into range, for values where 0 is legitimate. */
-  clampedNumber(
-    key: string,
-    fallback: number,
+  private clampedNumber(
+    key: keyof RouterConfig,
     min: number,
     max: number,
   ): number {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
+    const value = this.raw[key];
+    if (value === undefined) return DEFAULTS[key] as number;
 
-    const parsed =
-      typeof value === "number" ? value : Number(String(value).trim());
-    if (!Number.isFinite(parsed)) {
-      warn(
-        `ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`,
+    if (typeof value !== "number" || value < min || value > max) {
+      logger.trace(
+        `ignoring ${key}: expected a number between ${min} and ${max}`,
       );
-      return fallback;
+      return DEFAULTS[key] as number;
     }
 
-    this.note(key, source);
-    return Math.min(max, Math.max(min, parsed));
+    return value;
   }
 
-  boolean(key: string, fallback: boolean): boolean {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
+  private strategy(): RoutingStrategy {
+    const value = this.raw.strategy;
+    if (value === undefined) return DEFAULTS.strategy as RoutingStrategy;
 
-    if (typeof value === "boolean") {
-      this.note(key, source);
-      return value;
-    }
-
-    const text = String(value).trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(text)) {
-      this.note(key, source);
-      return true;
-    }
-    if (["0", "false", "no", "off"].includes(text)) {
-      this.note(key, source);
-      return false;
-    }
-
-    warn(`ignoring invalid ${key}=${JSON.stringify(value)}; using ${fallback}`);
-    return fallback;
-  }
-
-  strategy(key: string, fallback: RoutingStrategy): RoutingStrategy {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return fallback;
-
-    const text = String(value).trim().toLowerCase();
-    if (isRoutingStrategy(text)) {
-      this.note(key, source);
-      return text;
-    }
-
-    warn(
-      `ignoring unknown ${key}=${JSON.stringify(value)}; using ${fallback}. Valid: ${STRATEGY_NAMES.join(", ")}`,
-    );
-    return fallback;
-  }
-
-  /** Preset list from a comma-separated string (env) or array (config); `undefined` selects auto-detection. */
-  array<T extends string>(
-    key: string,
-    filter?: (s: string) => s is T,
-  ): T[] | undefined {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return undefined;
-
-    const requested = (
-      Array.isArray(value)
-        ? value.map((entry) => String(entry))
-        : String(value).split(",")
-    )
-      .map((entry) => entry.trim().toLowerCase())
-      .filter((entry) => entry.length > 0);
-
-    if (requested.length === 0) return undefined;
-
-    const known = filter ? requested.filter<T>(filter) : (requested as T[]);
-    const unknown = filter ? requested.filter((entry) => !filter(entry)) : [];
-    if (unknown.length > 0) {
-      warn(
-        `ignoring unknown preset(s) ${unknown.join(", ")}; valid: ${PRESET_NAMES.join(", ")}`,
+    if (typeof value !== "string" || !STRATEGY_NAMES.includes(value)) {
+      logger.trace(
+        `ignoring options.strategy: expected a routing strategy (${DEFAULTS.strategy} fallback)`,
       );
+      return DEFAULTS.strategy as RoutingStrategy;
     }
-    if (known.length === 0) return undefined;
 
-    this.note(key, source);
-    return known;
+    return value;
   }
 
-  /** A plain object of agent requirement overrides. */
-  agents(key: string): Record<string, AgentRequirements> {
-    const { value, source } = this.raw(key);
-    if (value === undefined) return {};
+  private agents(): Record<string, AgentRequirements> {
+    let value = this.raw.agents;
 
     if (typeof value !== "object" || Array.isArray(value)) {
-      warn(`ignoring ${key}: expected an object of agent names`);
-      return {};
+      logger.trace(
+        `ignoring options.agents: expected an object of agent names`,
+      );
+      value = {};
     }
 
-    this.note(key, source);
-    return value as Record<string, AgentRequirements>;
-  }
-}
-
-/** Config key -> environment variable suffix. */
-function envSuffix(key: string): string {
-  return key.replace(/[A-Z]/g, (char) => `_${char}`).toUpperCase();
-}
-
-export function loadConfig(options: PluginOptions = {}): RouterConfig {
-  const resolve = new Resolver(options);
-
-  // Logging is resolved first so everything below can report through the same
-  // switch the user set.
-  const verbose = resolve.boolean("log", false);
-
-  const configured = resolve.array<PresetName>("presets");
-  const presets = configured ?? detectPresets();
-
-  const config: RouterConfig = {
-    refreshMs: resolve.positiveNumber("refreshMs", 60 * 60_000),
-    maxFallbacks: Math.max(
-      1,
-      Math.floor(resolve.positiveNumber("maxFallbacks", 5)),
-    ),
-    probe: resolve.boolean("probe", false),
-    probeTimeoutMs: resolve.positiveNumber("probeTimeoutMs", 8_000),
-    strategy: resolve.strategy("strategy", "adaptive"),
-    minHealth: resolve.clampedNumber("minHealth", 0.5, 0, 1),
-    log: verbose,
-    presets,
-    agents: resolve.agents("agents"),
-    ignoredProviders: resolve.array("ignoredProviders") ?? [],
-  };
-
-  if (verbose) {
-    const origin = configured ? resolve.source("presets") : "detected";
-    const overridden = Object.entries(config)
-      .filter(([key]) => resolve.source(key) !== "default")
-      .map(([key]) => `${key}(${resolve.source(key)})`)
-      .join(" ");
-
-    warn(
-      `routing for preset(s): ${presets.join(", ") || "(none)"} (${origin})` +
-        (overridden ? ` | set: ${overridden}` : " | all defaults"),
+    const presets = presetAgentNames(
+      this.array("presets", this.detectedPresets),
     );
-  }
 
-  return config;
+    const origin = this.raw.presets?.length ? "options" : "detected";
+    const overridden = this.raw.agents
+      ? Object.keys(this.raw.agents)
+      : undefined;
+
+    logger.trace(
+      `routing for agents(s): ${presets?.join(", ") || "(none)"} (${origin} presets)` +
+        (overridden ? ` and options.agents: ${overridden}` : ""),
+    );
+
+    return {
+      ...presets.reduce(
+        (acc, agent) => {
+          acc[agent] = AGENT_REQUIREMENTS[agent];
+          return acc;
+        },
+        {} as Record<string, AgentRequirements>,
+      ),
+      ...value,
+    } as Record<string, AgentRequirements>;
+  }
 }

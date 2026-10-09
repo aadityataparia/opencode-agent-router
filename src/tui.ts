@@ -1,12 +1,11 @@
-import { appendFileSync, readFileSync } from "node:fs";
-import { createElement, insert, setProp } from "@opentui/solid";
+import { readFileSync } from "node:fs";
+import { createElement, insert, JSX, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
+import { logger } from "./logger";
 
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
-const REFRESH_MS = 1_000;
-
-const TRACE = process.env.OPENCODE_AGENT_ROUTER_TRACE;
+const REFRESH_MS = 5_000;
 
 interface SelectedModel {
   readonly providerID: string;
@@ -18,28 +17,19 @@ interface SelectedModel {
 
 interface Route {
   readonly agent: string;
-  readonly target: string;
+  readonly target?: string;
 }
 
 type TuiContext = Parameters<Parameters<typeof Plugin.define>[0]["setup"]>[0];
 type TuiLocation = ReturnType<TuiContext["data"]["location"]["default"]>;
 type Theme = TuiContext["theme"];
-
-/** Opt-in breadcrumb for verifying this plugin inside a real TUI. */
-function trace(event: string): void {
-  if (!TRACE) return;
-  try {
-    appendFileSync(TRACE, `${new Date().toISOString()} ${event}\n`);
-  } catch {
-    // Tracing must never break the sidebar.
-  }
-}
+type BaseRenderable = JSX.Element;
 
 export const OpenCodeAgentRouterTui = Plugin.define({
   id: "opencode-agent-router.tui",
   setup: (ctx: TuiContext) => {
     const theme = ctx.theme;
-    trace(`setup version=${readVersion()}`);
+    logger.trace(`setup version=${readVersion()}`);
 
     let expanded = false;
     let disposed = false;
@@ -51,7 +41,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         const result = await ctx.client.agent.list({});
         const agents = result.data ?? [];
         routes = toRoutes(agents);
-        trace(
+        logger.trace(
           `agent.list total=${agents.length} routed=${routes.length} ids=${agents
             .map((a) => a.id)
             .join("|")}, models=${agents
@@ -59,7 +49,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
             .join("|")}`,
         );
       } catch (error) {
-        trace(`agent.list failed ${String(error)}`);
+        logger.trace(`agent.list failed ${String(error)}`);
       }
     };
 
@@ -70,16 +60,14 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         ? routes.find((route) => route.agent === selected.agent)
         : undefined;
 
-      const visible = expanded
+      const visible: Route[] = expanded
         ? [
             ...(current ? [current] : []),
             ...routes.filter((route) => route.agent !== current?.agent),
           ]
-        : current
-          ? [current]
-          : [];
+        : [current].filter((x): x is Route => !!x);
 
-      trace(
+      logger.trace(
         `render expanded=${expanded} routes=${routes.length} current=${current?.agent ?? "none"} visible=${visible.length}`,
       );
 
@@ -91,24 +79,23 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         [
           header(theme, readVersion(), expanded, routes.length, () => {
             expanded = !expanded;
-            trace(`toggle expanded=${expanded}`);
+            logger.trace(`toggle expanded=${expanded}`);
             rebuild();
           }),
           ...visible.map((route) =>
             routeRow(theme, route, {
               current: route.agent === current?.agent,
-              currentModel: route.target === selected?.target,
+              // An unassigned route has no target, so it must never compare equal
+              // to the selection and claim to be the model in use.
+              currentModel:
+                route.target !== undefined && route.target === selected?.target,
               variant:
                 route.agent === current?.agent ? selected?.variant : undefined,
             }),
           ),
           ...emptyState(theme, routes, current, expanded),
         ],
-      );
-    };
-
-    const claim = (): void => {
-      disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
+      ) as unknown as Element;
     };
 
     // The host exposes no reactive hook for the sidebar's inputs, and a tree
@@ -116,7 +103,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
     const rebuild = (): void => {
       if (disposed) return;
       disposeSlot?.();
-      claim();
+      disposeSlot = ctx.ui.slot({ append: "sidebar.content", render: build });
       ctx.renderer.requestRender();
     };
 
@@ -124,7 +111,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
 
     // The event is a nudge; the rebuild re-reads state, so it carries no data.
     const onChange = (label: string): void => {
-      trace(label);
+      logger.trace(label);
       void refreshRoutes().then(() => {
         rebuild();
         // Re-seed so the poll does not rebuild the same tree again.
@@ -149,15 +136,12 @@ export const OpenCodeAgentRouterTui = Plugin.define({
         const next = stateSignature(ctx, routes);
         if (next === signature) return;
         signature = next;
-        trace(`change ${next}`);
+        logger.trace(`change ${next}`);
         rebuild();
       });
     }, REFRESH_MS);
 
-    void refreshRoutes().then(() => {
-      claim();
-      signature = stateSignature(ctx, routes);
-    });
+    onChange("init");
 
     return () => {
       disposed = true;
@@ -175,34 +159,48 @@ export default OpenCodeAgentRouterTui;
 
 type PropType = string | number | Theme["text"]["base"] | boolean;
 
+type Child =
+  | JSX.Element
+  | string
+  | number
+  | null
+  | undefined
+  | false
+  | (() => string);
+
 function element(
   tag: string,
-  props: Record<string, PropType> = {},
-  children: unknown[] = [],
-): Element {
+  props: Record<string, unknown>,
+  children: Child[] = [],
+) {
   const node = createElement(tag);
+
   for (const [key, value] of Object.entries(props)) {
     if (value !== undefined) setProp(node, key, value);
   }
+
   for (const child of children) {
     if (child === null || child === undefined || child === false) continue;
     insert(node, child);
   }
-  return node;
+
+  return node as unknown as JSX.Element;
 }
 
 const box = (
   props: Record<string, PropType>,
-  children: unknown[] = [],
-): Element => element("box", props, children);
+  children: Child[] = [],
+): BaseRenderable => element("box", props, children);
 
-const text = (props: Record<string, PropType>, children: unknown[]): Element =>
-  element("text", props, children);
+const text = (
+  props: Record<string, PropType>,
+  children: Child[],
+): BaseRenderable => element("text", props, children);
 
 const column = (
   props: Record<string, PropType>,
-  children: unknown[],
-): Element => box({ flexDirection: "column", ...props }, children);
+  children: Child[],
+): BaseRenderable => box({ flexDirection: "column", ...props }, children);
 
 /** `Model Router` badge on the left, plugin version muted on the right. */
 function header(
@@ -211,7 +209,7 @@ function header(
   expanded: boolean,
   count: number,
   onToggle: () => void,
-): Element {
+): BaseRenderable {
   const row = box(
     {
       width: "100%",
@@ -229,14 +227,16 @@ function header(
     ],
   );
 
-  return interactive(row, onToggle);
+  setProp(row as never, "onMouseUp", onToggle);
+
+  return row;
 }
 
 function routeRow(
   theme: Theme,
   route: Route,
   options: { current: boolean; currentModel: boolean; variant?: string },
-): Element {
+): BaseRenderable {
   const fg =
     options.current && options.currentModel
       ? theme.text.feedback.success.base
@@ -266,9 +266,11 @@ function routeRow(
         },
         [
           "  ↳ " +
-            (options.variant
-              ? `${route.target} (${options.variant})`
-              : route.target),
+            (route.target === undefined
+              ? "assigning model…"
+              : options.variant
+                ? `${route.target} (${options.variant})`
+                : route.target),
         ],
       ),
     ],
@@ -280,7 +282,7 @@ function emptyState(
   routes: Route[],
   current: Route | undefined,
   expanded: boolean,
-): Element[] {
+): BaseRenderable[] {
   if (routes.length === 0) {
     return [
       column({ width: "100%", marginTop: 1 }, [
@@ -300,12 +302,6 @@ function emptyState(
   ];
 }
 
-/** Click to activate, like the host's sidebar rows. No hover fill: clearing it means setting a prop to `undefined`. */
-function interactive(node: Element, onActivate: () => void): Element {
-  setProp(node, "onMouseUp", () => onActivate());
-  return node;
-}
-
 /* -------------------------------------------------------------------- state */
 
 /** Live routes, read from the agents the server maintains. An agent with no model is not a route yet. */
@@ -316,10 +312,9 @@ function toRoutes(
   for (const agent of agents) {
     if (!agent.id.startsWith(ROUTER_AGENT_PREFIX)) continue;
     const model = agent.model;
-    if (!model) continue;
     routes.push({
       agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-      target: `${model.providerID}/${model.id}`,
+      target: model ? `${model.providerID}/${model.id}` : "no usable model",
     });
   }
   return routes.sort((a, b) => a.agent.localeCompare(b.agent));
@@ -330,32 +325,36 @@ function readSelection(
   ctx: TuiContext,
   location: TuiLocation,
 ): SelectedModel | undefined {
-  const route = ctx.ui.router.current();
-  if (route.type === "session") {
-    const agent = ctx.data.session
-      .get(route.sessionID)
-      ?.agent?.replace(ROUTER_AGENT_PREFIX, "");
-    const model = ctx.data.session.get(route.sessionID)?.model;
-    return model
-      ? {
-          providerID: model.providerID,
-          id: model.id,
-          variant: model.variant,
-          target: `${model.providerID}/${model.id}`,
-          agent,
-        }
-      : undefined;
-  }
+  try {
+    const route = ctx.ui.router.current();
+    if (route.type === "session") {
+      const agent = ctx.data.session
+        .get(route.sessionID)
+        ?.agent?.replace(ROUTER_AGENT_PREFIX, "");
+      const model = ctx.data.session.get(route.sessionID)?.model;
+      return model
+        ? {
+            providerID: model.providerID,
+            id: model.id,
+            variant: model.variant,
+            target: `${model.providerID}/${model.id}`,
+            agent,
+          }
+        : undefined;
+    }
 
-  const agents = ctx.data.location.agent.list(location) ?? [];
-  const primary = agents.find((agent) => agent.mode === "primary");
-  if (!primary?.model) return undefined;
-  return {
-    providerID: primary.model.providerID,
-    target: `${primary.model.providerID}/${primary.model.id}`,
-    id: primary.model.id,
-    agent: primary.id,
-  };
+    const agents = ctx.data.location.agent.list(location) ?? [];
+    const primary = agents.find((agent) => agent.mode === "primary");
+    if (!primary?.model) return undefined;
+    return {
+      providerID: primary.model.providerID,
+      target: `${primary.model.providerID}/${primary.model.id}`,
+      id: primary.model.id,
+      agent: primary.id,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /** Change detector for the poll loop, from the same reads `build` performs. */
@@ -363,7 +362,7 @@ function stateSignature(ctx: TuiContext, routes: readonly Route[]): string {
   const location = ctx.location ?? ctx.data.location.default();
   const selected = readSelection(ctx, location);
   const assigned = routes
-    .map((route) => `${route.agent}=${route.target}`)
+    .map((route) => `${route.agent}=${route.target ?? ""}`)
     .join(",");
   const selection = [
     selected?.providerID ?? "",
@@ -376,7 +375,7 @@ function stateSignature(ctx: TuiContext, routes: readonly Route[]): string {
 function readVersion(): string {
   try {
     const raw = readFileSync(
-      new URL("../package.json", import.meta.url),
+      new URL("./package.json", import.meta.url),
       "utf8",
     );
     const parsed = JSON.parse(raw) as { version?: string };
