@@ -87,8 +87,7 @@ export const OpenCodeAgentRouterTui = Plugin.define({
               current: route.agent === current?.agent,
               // An unassigned route has no target, so it must never compare equal
               // to the selection and claim to be the model in use.
-              currentModel:
-                route.target !== undefined && route.target === selected?.target,
+              currentModel: selected?.target,
               variant:
                 route.agent === current?.agent ? selected?.variant : undefined,
             }),
@@ -235,13 +234,18 @@ function header(
 function routeRow(
   theme: Theme,
   route: Route,
-  options: { current: boolean; currentModel: boolean; variant?: string },
+  options: {
+    current: boolean;
+    currentModel: string | undefined;
+    variant?: string;
+  },
 ): BaseRenderable {
   const fg =
     options.current && options.currentModel
       ? theme.text.feedback.success.base
       : theme.text.base;
   const marker = options.current ? "• " : "  ";
+  const model = options.current ? options.currentModel : route.target;
   return box(
     {
       width: "100%",
@@ -251,7 +255,7 @@ function routeRow(
     },
     [
       text({ fg, wrapMode: "none", truncate: true, flexShrink: 1 }, [
-        `${marker}${route.agent} ${options.current && !options.currentModel ? "\n (Model Manually changed)" : ""}`,
+        `${marker}${route.agent}${options.current && route.target !== options.currentModel ? " (Manual)" : ""}`,
       ]),
       text(
         {
@@ -264,14 +268,7 @@ function routeRow(
           flexShrink: 1,
           textAlign: "right",
         },
-        [
-          "  ↳ " +
-            (route.target === undefined
-              ? "assigning model…"
-              : options.variant
-                ? `${route.target} (${options.variant})`
-                : route.target),
-        ],
+        ["  ↳ " + (options.variant ? `${model} (${options.variant})` : model)],
       ),
     ],
   );

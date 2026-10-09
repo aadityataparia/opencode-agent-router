@@ -3,14 +3,7 @@ import { Config } from "./config";
 import { ModelStore } from "./model-store";
 import { Router } from "./router";
 import { ROUTER_AGENT_PREFIX, STRATEGY_NAMES } from "./types";
-import type {
-  AgentName,
-  Candidate,
-  DiscoveredModel,
-  RouterConfig,
-  RoutingStrategy,
-} from "./types";
-import { Context } from "@opencode/plugin/promise/plugin";
+import type { AgentName, DiscoveredModel, RoutingStrategy } from "./types";
 
 /**
  * Pure parsing and rendering for `/router`: the handler in `index.ts` owns the
@@ -151,38 +144,6 @@ export function parseCommand(text: string): ParsedCommand {
 
 function normalize(value: string): string {
   return value.trim().toLowerCase();
-}
-
-export interface StatusView {
-  config: RouterConfig;
-  /** Agent -> chosen model for the routed agents currently published. */
-  assignments: ReadonlyMap<string, Candidate>;
-  /** Agent -> pinned model ref. */
-  pins: ReadonlyMap<string, string>;
-  /** Agents eligible for routing under the active presets. */
-  routedAgents: readonly string[];
-  currentAgent?: string;
-  discovered: number;
-  /** Models left in the pool after probing. */
-  routable: number;
-  /** The pool itself; only `/router usable` renders it. */
-  pool?: readonly Candidate[];
-  coolingDown: number;
-  /** Provider -> models rejected for auth, sticky across passes. */
-  authBlocked: readonly (readonly [string, number])[];
-  lastRun:
-    | { at: number; reason: string; probed: number; usable: number }
-    | undefined;
-  refreshMs: number;
-  now: number;
-}
-
-function formatDuration(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
 function healthCell(model: DiscoveredModel, now: number): string {

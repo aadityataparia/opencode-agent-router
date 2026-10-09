@@ -40,7 +40,7 @@ var OpenCodeAgentRouterTui = Plugin.define({
 				}),
 				...visible.map((route) => routeRow(theme, route, {
 					current: route.agent === current?.agent,
-					currentModel: route.target !== void 0 && route.target === selected?.target,
+					currentModel: selected?.target,
 					variant: route.agent === current?.agent ? selected?.variant : void 0
 				})),
 				...emptyState(theme, routes, current, expanded)
@@ -124,6 +124,7 @@ function header(theme, version, expanded, count, onToggle) {
 function routeRow(theme, route, options) {
 	const fg = options.current && options.currentModel ? theme.text.feedback.success.base : theme.text.base;
 	const marker = options.current ? "• " : "  ";
+	const model = options.current ? options.currentModel : route.target;
 	return box({
 		width: "100%",
 		flexDirection: "column",
@@ -134,13 +135,13 @@ function routeRow(theme, route, options) {
 		wrapMode: "none",
 		truncate: true,
 		flexShrink: 1
-	}, [`${marker}${route.agent} ${options.current && !options.currentModel ? "\n (Model Manually changed)" : ""}`]), text({
+	}, [`${marker}${route.agent}${options.current && route.target !== options.currentModel ? " (Manual)" : ""}`]), text({
 		fg: options.current && options.currentModel ? theme.text.base : theme.text.muted,
 		wrapMode: "none",
 		truncate: true,
 		flexShrink: 1,
 		textAlign: "right"
-	}, ["  ↳ " + (route.target === void 0 ? "assigning model…" : options.variant ? `${route.target} (${options.variant})` : route.target)])]);
+	}, ["  ↳ " + (options.variant ? `${model} (${options.variant})` : model)])]);
 }
 function emptyState(theme, routes, current, expanded) {
 	if (routes.length === 0) return [column({
