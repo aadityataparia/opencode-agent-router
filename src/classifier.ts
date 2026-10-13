@@ -76,10 +76,10 @@ export function classifyModel(model: any): DiscoveredModel {
   categories.add("general");
 
   return {
-    providerID: String(m.providerID ?? ""),
-    id: String(m.id ?? m.modelID ?? ""),
-    modelID: m.modelID ?? m.id,
-    target: `${m.providerID}/${m.id ?? m.modelID}`,
+    providerID: m.providerID,
+    id: m.id,
+    modelID: m.modelID,
+    target: m.id ?? `${m.providerID}/${m.modelID}`,
     name: m.name,
     family: m.family,
     context: Number(m.limit?.context ?? 0),

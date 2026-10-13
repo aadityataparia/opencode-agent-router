@@ -491,10 +491,10 @@ function classifyModel(model) {
 	if ((m.limit?.context ?? 0) >= 1e5) categories.add("long-context");
 	categories.add("general");
 	return {
-		providerID: String(m.providerID ?? ""),
-		id: String(m.id ?? m.modelID ?? ""),
-		modelID: m.modelID ?? m.id,
-		target: `${m.providerID}/${m.id ?? m.modelID}`,
+		providerID: m.providerID,
+		id: m.id,
+		modelID: m.modelID,
+		target: m.id ?? `${m.providerID}/${m.modelID}`,
 		name: m.name,
 		family: m.family,
 		context: Number(m.limit?.context ?? 0),
