@@ -7,10 +7,8 @@
   "description": "Dynamic model discovery, health probing, classification and per-agent routing for OpenCode + oh-my-opencode/slim.",
   "license": "MIT",
   "scripts": {
-    "build": "vite build",
-    "compile": "tsc -p tsconfig.json",
-    "check": "tsc -p tsconfig.json --noEmit",
-    "prepack": "pnpm run build"
+    "compile": "vite build",
+    "check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@opencode/client": "2.0.18",
