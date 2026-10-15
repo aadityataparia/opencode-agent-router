@@ -1,4 +1,4 @@
-import { t as logger } from "./chunks/logger-BB4yfKgq.js";
+import { n as getModelTarget, r as logger } from "./chunks/classifier-DHIeqcxz.js";
 import { readFileSync } from "node:fs";
 import { createElement, insert, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
@@ -168,7 +168,7 @@ function toRoutes(agents) {
 		const model = agent.model;
 		routes.push({
 			agent: agent.id.slice(13),
-			target: model ? `${model.providerID}/${model.id}` : "no usable model"
+			target: model ? getModelTarget(model) : "no usable model"
 		});
 	}
 	return routes.sort((a, b) => a.agent.localeCompare(b.agent));
@@ -184,7 +184,7 @@ function readSelection(ctx, location) {
 				providerID: model.providerID,
 				id: model.id,
 				variant: model.variant,
-				target: `${model.providerID}/${model.id}`,
+				target: getModelTarget(model),
 				agent
 			} : void 0;
 		}
@@ -192,7 +192,7 @@ function readSelection(ctx, location) {
 		if (!primary?.model) return void 0;
 		return {
 			providerID: primary.model.providerID,
-			target: `${primary.model.providerID}/${primary.model.id}`,
+			target: getModelTarget(primary.model),
 			id: primary.model.id,
 			agent: primary.id
 		};

@@ -1,4 +1,4 @@
-import { t as logger } from "./chunks/logger-BB4yfKgq.js";
+import { n as getModelTarget, r as logger, t as classifyModel } from "./chunks/classifier-DHIeqcxz.js";
 import { Agent, Model, Plugin, Provider } from "@opencode/plugin";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -416,107 +416,6 @@ var Config = class {
 		};
 	}
 };
-//#endregion
-//#region src/classifier.ts
-var CODING = [
-	"codex",
-	"coder",
-	"coding",
-	"code",
-	"codestral",
-	"devstral",
-	"deepseek-coder",
-	"qwen-coder",
-	"starcoder",
-	"swe"
-];
-var REASONING = [
-	"reason",
-	"reasoning",
-	"thinking",
-	"think",
-	"o1",
-	"o3",
-	"o4",
-	"r1",
-	"r2",
-	"opus"
-];
-var FAST = [
-	"mini",
-	"nano",
-	"flash",
-	"haiku",
-	"small",
-	"lite",
-	"fast",
-	"instant"
-];
-var CHEAP = [
-	"mini",
-	"nano",
-	"flash",
-	"haiku",
-	"small",
-	"lite"
-];
-function contains(text, patterns) {
-	return patterns.some((pattern) => text.includes(pattern));
-}
-function inputSupportsVision(model) {
-	const input = model.capabilities?.input;
-	if (!Array.isArray(input)) return false;
-	return [
-		"image",
-		"video",
-		"pdf"
-	].some((kind) => input.includes(kind));
-}
-function classifyModel(model) {
-	const m = model;
-	const text = [m.id, m.family].filter(Boolean).join(" ").toLowerCase();
-	const categories = /* @__PURE__ */ new Set();
-	const vision = Boolean(model.capabilities?.vision) || inputSupportsVision(model) || contains(text, [
-		"vision",
-		"vl",
-		"multimodal"
-	]);
-	const reasoning = Boolean(model.capabilities?.reasoning) || Boolean(m.compatibility?.reasoningField) || contains(text, REASONING);
-	const tools = Boolean(m.capabilities?.tools);
-	if (vision) categories.add("vision");
-	if (reasoning) categories.add("reasoning");
-	if (contains(text, CODING)) categories.add("coding");
-	if (contains(text, FAST)) categories.add("fast");
-	if (contains(text, CHEAP)) categories.add("cheap");
-	if ((m.limit?.context ?? 0) >= 1e5) categories.add("long-context");
-	categories.add("general");
-	return {
-		providerID: m.providerID,
-		id: m.id,
-		modelID: m.modelID,
-		target: m.id ?? `${m.providerID}/${m.modelID}`,
-		name: m.name,
-		family: m.family,
-		context: Number(m.limit?.context ?? 0),
-		outputLimit: Number(m.limit?.output ?? 0),
-		capabilities: {
-			reasoning,
-			vision,
-			tools
-		},
-		cost: {
-			input: typeof m.cost[0]?.input === "number" ? m.cost[0]?.input : void 0,
-			output: typeof m.cost[0]?.output === "number" ? m.cost[0]?.output : void 0
-		},
-		categories,
-		health: 1,
-		latencyMs: Infinity,
-		lastProbeResult: true,
-		failures: 0,
-		successes: 0,
-		releasedAt: m.time.released
-	};
-}
 //#endregion
 //#region src/model-store.ts
 var MODEL_STATE_KEY = "model-router:model-state:";
@@ -1368,7 +1267,7 @@ ${text}
 		req.request.startTime = Date.now();
 	});
 	await ctx.session.hook("http.response", async (req) => {
-		const target = `${req.model.providerID}/${req.model.id}`;
+		const target = getModelTarget(req.model);
 		if (!req.request.startTime) return;
 		modelStore.recordProbe(target, {
 			verdict: req.response.ok ? "ok" : "unusable",
@@ -1380,7 +1279,7 @@ ${text}
 		}
 	});
 	await ctx.session.hook("experimental.ws.receive", (req) => {
-		const target = `${req.model.providerID}/${req.model.id}`;
+		const target = getModelTarget(req.model);
 		modelStore.recordProbe(target, {
 			verdict: "ok",
 			latencyMs: 100

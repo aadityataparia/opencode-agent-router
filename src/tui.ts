@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { createElement, insert, JSX, setProp } from "@opentui/solid";
 import { Plugin } from "@opencode/plugin/tui";
 import { logger } from "./logger";
+import { getModelTarget } from "./classifier";
 
 /** Renders the routed agents in the sidebar: reference information, not a task worth a model turn. */
 const ROUTER_AGENT_PREFIX = "model-router/";
@@ -311,7 +312,7 @@ function toRoutes(
     const model = agent.model;
     routes.push({
       agent: agent.id.slice(ROUTER_AGENT_PREFIX.length),
-      target: model ? `${model.providerID}/${model.id}` : "no usable model",
+      target: model ? getModelTarget(model) : "no usable model",
     });
   }
   return routes.sort((a, b) => a.agent.localeCompare(b.agent));
@@ -334,7 +335,7 @@ function readSelection(
             providerID: model.providerID,
             id: model.id,
             variant: model.variant,
-            target: `${model.providerID}/${model.id}`,
+            target: getModelTarget(model),
             agent,
           }
         : undefined;
@@ -345,7 +346,7 @@ function readSelection(
     if (!primary?.model) return undefined;
     return {
       providerID: primary.model.providerID,
-      target: `${primary.model.providerID}/${primary.model.id}`,
+      target: getModelTarget(primary.model),
       id: primary.model.id,
       agent: primary.id,
     };

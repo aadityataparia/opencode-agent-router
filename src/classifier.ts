@@ -1,5 +1,5 @@
 import { Model } from "@opencode/plugin";
-import type { DiscoveredModel, ModelCategory } from "./types";
+import type { CompactModel, DiscoveredModel, ModelCategory } from "./types";
 
 const CODING = [
   "codex",
@@ -47,6 +47,15 @@ function inputSupportsVision(model: Model.Info): boolean {
   return ["image", "video", "pdf"].some((kind) => input.includes(kind));
 }
 
+export const getModelTarget = (model: {
+  id?: string;
+  providerID: string;
+  modelID?: string;
+}) => {
+  if (model.id?.includes("/")) return model.id;
+  return `${model.providerID}/${model.id ?? model.modelID}`;
+};
+
 export function classifyModel(model: any): DiscoveredModel {
   const m = model as Model.Info;
 
@@ -79,7 +88,7 @@ export function classifyModel(model: any): DiscoveredModel {
     providerID: m.providerID,
     id: m.id,
     modelID: m.modelID,
-    target: m.id ?? `${m.providerID}/${m.modelID}`,
+    target: getModelTarget(m),
     name: m.name,
     family: m.family,
     context: Number(m.limit?.context ?? 0),

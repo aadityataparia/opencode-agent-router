@@ -8,6 +8,7 @@ import { logger } from "./logger";
 import { handleRouterCommand } from "./commands";
 import { SessionInfo } from "@opencode/client";
 import { AgentName, ROUTER_AGENT_PREFIX } from "./types";
+import { getModelTarget } from "./classifier";
 
 const ROUTER_COMMAND = "router";
 
@@ -120,7 +121,7 @@ ${text}
   });
 
   await ctx.session.hook("http.response", async (req) => {
-    const target = `${req.model.providerID}/${req.model.id}`;
+    const target = getModelTarget(req.model);
 
     if (!req.request.startTime) return;
 
@@ -143,7 +144,7 @@ ${text}
   });
 
   await ctx.session.hook("experimental.ws.receive", (req) => {
-    const target = `${req.model.providerID}/${req.model.id}`;
+    const target = getModelTarget(req.model);
 
     modelStore.recordProbe(target, {
       verdict: "ok",
