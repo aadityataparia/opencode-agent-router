@@ -770,6 +770,7 @@ var Router = class {
 	}
 	unpin(agent) {
 		this.pins.delete(agent);
+		this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
 	}
 	async assignModels(agents) {
 		const assignments = await this.getAssignments(agents);

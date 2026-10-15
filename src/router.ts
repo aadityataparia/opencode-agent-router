@@ -80,6 +80,7 @@ export class Router {
 
   unpin(agent: AgentName): void {
     this.pins.delete(agent);
+    void this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
   }
 
   async assignModels(
