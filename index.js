@@ -756,7 +756,8 @@ var Router = class {
 	}
 	async getAssignments(agents) {
 		const agentsToProcess = agents || Object.keys(this.config.current.agents);
-		for (const agent of agentsToProcess) {
+		const sortedAgents = agentsToProcess.includes("orchestrator") ? ["orchestrator", ...agentsToProcess.filter((a) => a === "orchestrator")] : agentsToProcess;
+		for (const agent of sortedAgents) {
 			const result = await this.choose(agent);
 			this.cachedAssignments.set(agent, result);
 		}
@@ -824,10 +825,8 @@ var Router = class {
 		const candidates = this.getCandidates(agent);
 		if (!candidates || candidates.length === 0) return void 0;
 		const current = this.cachedAssignments.get(agent);
-		if (current) {
-			if ((await this.probeModel(current)).verdict === "ok") return candidates.find((c) => c.target === current.target);
-		}
-		for (const candidate of candidates) {
+		const sortedCandidates = [candidates.find((c) => c.target === current?.target), ...candidates].filter((c) => !!c && c.target !== this.cachedAssignments.get("orchestrator")?.target);
+		for (const candidate of sortedCandidates) {
 			if (candidate.target === current?.target) continue;
 			if ((await this.probeModel(candidate)).verdict === "ok") return candidate;
 		}

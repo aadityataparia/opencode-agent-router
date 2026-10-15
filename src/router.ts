@@ -58,7 +58,11 @@ export class Router {
   ): Promise<Map<AgentName, CompactModel | undefined>> {
     const agentsToProcess =
       agents || (Object.keys(this.config.current.agents) as AgentName[]);
-    for (const agent of agentsToProcess) {
+
+    const sortedAgents: AgentName[] = agentsToProcess.includes("orchestrator")
+      ? ["orchestrator", ...agentsToProcess.filter((a) => a === "orchestrator")]
+      : agentsToProcess;
+    for (const agent of sortedAgents) {
       const result = await this.choose(agent);
       this.cachedAssignments.set(agent, result);
     }
@@ -169,13 +173,15 @@ export class Router {
     if (!candidates || candidates.length === 0) return undefined;
 
     const current = this.cachedAssignments.get(agent);
-    if (current) {
-      if ((await this.probeModel(current)).verdict === "ok") {
-        return candidates.find((c) => c.target === current.target);
-      }
-    }
+    const sortedCandidates = [
+      candidates.find((c) => c.target === current?.target),
+      ...candidates,
+    ].filter(
+      (c): c is Candidate =>
+        !!c && c.target !== this.cachedAssignments.get("orchestrator")?.target,
+    );
 
-    for (const candidate of candidates) {
+    for (const candidate of sortedCandidates) {
       if (candidate.target === current?.target) continue;
 
       if ((await this.probeModel(candidate)).verdict === "ok") {
