@@ -826,10 +826,7 @@ var Router = class {
 		if (!candidates || candidates.length === 0) return void 0;
 		const current = this.cachedAssignments.get(agent);
 		const sortedCandidates = [candidates.find((c) => c.target === current?.target), ...candidates].filter((c) => !!c && c.target !== this.cachedAssignments.get("orchestrator")?.target);
-		for (const candidate of sortedCandidates) {
-			if (candidate.target === current?.target) continue;
-			if ((await this.probeModel(candidate)).verdict === "ok") return candidate;
-		}
+		for (const candidate of sortedCandidates) if ((await this.probeModel(candidate)).verdict === "ok") return candidate;
 	}
 	async probeModel(model) {
 		if (this.modelStore.needsProbe(model.target)) {

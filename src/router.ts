@@ -182,8 +182,6 @@ export class Router {
     );
 
     for (const candidate of sortedCandidates) {
-      if (candidate.target === current?.target) continue;
-
       if ((await this.probeModel(candidate)).verdict === "ok") {
         return candidate;
       }
