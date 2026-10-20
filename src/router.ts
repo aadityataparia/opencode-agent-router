@@ -87,6 +87,11 @@ export class Router {
     void this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
   }
 
+  unpinAll(): void {
+    this.pins.clear();
+    void this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
+  }
+
   async assignModels(
     agents?: AgentName[],
   ): Promise<{ dispose: () => Promise<void> }> {

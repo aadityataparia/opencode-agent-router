@@ -365,7 +365,7 @@ export async function handleRouterCommand(
       void say(`Unpinned agent \`${command.agent}\`.`);
       break;
     case "unpin-all":
-      router.pins.clear();
+      router.unpinAll();
       await reassign();
       void say("Unpinned every agent.");
       break;

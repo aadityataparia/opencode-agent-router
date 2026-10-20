@@ -773,6 +773,10 @@ var Router = class {
 		this.pins.delete(agent);
 		this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
 	}
+	unpinAll() {
+		this.pins.clear();
+		this.storage.set(PIN_KEY, Object.fromEntries(this.pins.entries()));
+	}
 	async assignModels(agents) {
 		const assignments = await this.getAssignments(agents);
 		this.transformDisposer?.();
@@ -1162,7 +1166,7 @@ async function handleRouterCommand(prompt, context) {
 			say(`Unpinned agent \`${command.agent}\`.`);
 			break;
 		case "unpin-all":
-			router.pins.clear();
+			router.unpinAll();
 			await reassign();
 			say("Unpinned every agent.");
 			break;
