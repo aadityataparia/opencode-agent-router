@@ -113,6 +113,8 @@ ${text}
   // Timer
   const timer = setTimeout(async () => {
     agentReg = await router.assignModels();
+    const catalog = await ctx.model.list();
+    await modelStore.setCatalog(catalog.data);
   }, config.current.refreshMs);
 
   // Probe hooks
