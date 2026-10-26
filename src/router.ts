@@ -56,8 +56,9 @@ export class Router {
   private async getAssignments(
     agents?: AgentName[],
   ): Promise<Map<AgentName, CompactModel | undefined>> {
-    const agentsToProcess =
-      agents || (Object.keys(this.config.current.agents) as AgentName[]);
+    const agentsToProcess = agents?.length
+      ? agents
+      : (Object.keys(this.config.current.agents) as AgentName[]);
 
     const sortedAgents: AgentName[] = agentsToProcess.includes("orchestrator")
       ? ["orchestrator", ...agentsToProcess.filter((a) => a === "orchestrator")]

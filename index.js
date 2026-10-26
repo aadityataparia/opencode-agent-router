@@ -755,7 +755,7 @@ var Router = class {
 		if (storedAssignments) for (const [agent, model] of Object.entries(storedAssignments)) this.cachedAssignments.set(agent, model);
 	}
 	async getAssignments(agents) {
-		const agentsToProcess = agents || Object.keys(this.config.current.agents);
+		const agentsToProcess = agents?.length ? agents : Object.keys(this.config.current.agents);
 		const sortedAgents = agentsToProcess.includes("orchestrator") ? ["orchestrator", ...agentsToProcess.filter((a) => a === "orchestrator")] : agentsToProcess;
 		for (const agent of sortedAgents) {
 			const result = await this.choose(agent);
@@ -829,7 +829,7 @@ var Router = class {
 		const candidates = this.getCandidates(agent);
 		if (!candidates || candidates.length === 0) return void 0;
 		const current = this.cachedAssignments.get(agent);
-		const sortedCandidates = [candidates.find((c) => c.target === current?.target), ...candidates].filter((c) => !!c && c.target !== this.cachedAssignments.get("orchestrator")?.target);
+		const sortedCandidates = [candidates.find((c) => c.target === current?.target), ...candidates].filter((c) => !!c && (agent === "orchestrator" || c.target !== this.cachedAssignments.get("orchestrator")?.target));
 		for (const candidate of sortedCandidates) if ((await this.probeModel(candidate)).verdict === "ok") return candidate;
 	}
 	async probeModel(model) {
@@ -1252,7 +1252,9 @@ ${text}
 							logger.error("could not post /router output to the session", error);
 						}
 					},
-					reassign: (agents) => {
+					reassign: async (agents) => {
+						const catalog = await ctx.model.list();
+						await modelStore.setCatalog(catalog.data);
 						return reassign(ctx, router, curSession, agents);
 					}
 				});
@@ -1263,6 +1265,8 @@ ${text}
 	await ctx.agent.reload();
 	const timer = setTimeout(async () => {
 		agentReg = await router.assignModels();
+		const catalog = await ctx.model.list();
+		await modelStore.setCatalog(catalog.data);
 	}, config.current.refreshMs);
 	await ctx.session.hook("http.request", (req) => {
 		req.request.startTime = Date.now();
