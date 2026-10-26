@@ -99,7 +99,9 @@ ${text}
               );
             }
           },
-          reassign: (agents?: AgentName[]) => {
+          reassign: async (agents?: AgentName[]) => {
+            const catalog = await ctx.model.list();
+            await modelStore.setCatalog(catalog.data);
             return reassign(ctx, router, curSession, agents);
           },
         });
