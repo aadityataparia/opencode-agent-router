@@ -183,7 +183,9 @@ export class Router {
       ...candidates,
     ].filter(
       (c): c is Candidate =>
-        !!c && c.target !== this.cachedAssignments.get("orchestrator")?.target,
+        !!c &&
+        (agent === "orchestrator" ||
+          c.target !== this.cachedAssignments.get("orchestrator")?.target),
     );
 
     for (const candidate of sortedCandidates) {
